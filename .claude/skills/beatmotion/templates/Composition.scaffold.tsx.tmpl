@@ -1,0 +1,88 @@
+import {
+  AbsoluteFill,
+  Audio,
+  Sequence,
+  useCurrentFrame,
+  useVideoConfig,__MEDIA_IMPORT_EXTRA__
+} from "remotion";
+import beatsData from "__BEATS_IMPORT__";
+import { createBeatHelpers } from "./useBeats";
+import { beatFade, dropPunch, sectionSlide, pickTransition } from "./transitions";
+__MEDIA_FILES_IMPORT__
+
+const helpers = createBeatHelpers(beatsData);
+
+export const __COMP_NAME__: React.FC = () => {
+  const { fps } = useVideoConfig();
+  return (
+    <AbsoluteFill
+      style={{
+        background: "black",
+        color: "white",
+        fontFamily: "system-ui, -apple-system, Helvetica, sans-serif",
+      }}
+    >
+      <Audio src="__AUDIO_SRC__" />
+      {helpers.sections.map((section, i) => {
+        const startFrame = Math.round(section.start * fps);
+        const endFrame = Math.round(section.end * fps);
+        const durationInFrames = Math.max(1, endFrame - startFrame);
+        return (
+          <Sequence
+            key={i}
+            from={startFrame}
+            durationInFrames={durationInFrames}
+          >
+            <SectionView sectionIndex={i} sectionStartFrame={startFrame} />
+          </Sequence>
+        );
+      })}
+    </AbsoluteFill>
+  );
+};
+
+const SectionView: React.FC<{
+  sectionIndex: number;
+  sectionStartFrame: number;
+}> = ({ sectionIndex, sectionStartFrame }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const section = helpers.sections[sectionIndex];
+
+  const beatsInSection = helpers.beats.filter(
+    (b) => b.time >= section.start && b.time < section.end
+  );
+  const dropsInSection = helpers.drops.filter(
+    (d) => d.time >= section.start && d.time < section.end
+  );
+
+  // Find the most recent beat at or before this frame.
+  const activeBeatIdx = (() => {
+    let idx = -1;
+    for (let i = 0; i < beatsInSection.length; i++) {
+      if (beatsInSection[i].frame <= frame) idx = i;
+      else break;
+    }
+    return idx;
+  })();
+  const activeBeat = activeBeatIdx >= 0 ? beatsInSection[activeBeatIdx] : null;
+  const transition = activeBeat ? pickTransition(activeBeat.strength) : "cut";
+
+  // Find the next drop within this section (if any) for emphasis.
+  const nextDrop = dropsInSection.find((d) => d.frame >= frame - 4);
+  const dropStyle = nextDrop
+    ? dropPunch(frame, nextDrop.frame, 0.18, 8)
+    : { transform: "scale(1)" };
+
+  // Per-section slide direction so adjacent sections don't feel identical.
+  const slideDirection = (["up", "left", "down", "right"] as const)[sectionIndex % 4];
+  const slideStyle = sectionSlide(frame, sectionStartFrame, fps, slideDirection, 80);
+
+  // Beat-strength-aware reveal: stronger beats animate with a longer fade ramp.
+  const fadeFrames = transition === "slide" ? 14 : transition === "fade" ? 8 : 1;
+  const fadeStyle = activeBeat
+    ? beatFade(frame, activeBeat.frame, fadeFrames)
+    : { opacity: 1 };
+
+  __MEDIA_RENDER_BLOCK__
+};
