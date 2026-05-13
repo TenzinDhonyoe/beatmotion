@@ -104,6 +104,11 @@
   ],
   "beats": [
     {
+      "time": 0,
+      "frame": 0,
+      "strength": 0.381
+    },
+    {
       "time": 0.6,
       "frame": 18,
       "strength": 0.381
@@ -366,5 +371,5 @@
     "maxBpm": 200,
     "delta": 0.7
   },
-  "generatedAt": "2026-05-13T18:35:23.126Z"
+  "generatedAt": "2026-05-13T20:43:12.727Z"
 }

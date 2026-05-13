@@ -64,6 +64,11 @@
   ],
   "beats": [
     {
+      "time": 0,
+      "frame": 0,
+      "strength": 0.398
+    },
+    {
       "time": 0.5,
       "frame": 15,
       "strength": 0.398
@@ -221,14 +226,9 @@
   ],
   "drops": [
     {
-      "time": 5,
-      "frame": 150,
-      "kind": "main_drop"
-    },
-    {
       "time": 8.75,
       "frame": 263,
-      "kind": "secondary_drop"
+      "kind": "main_drop"
     }
   ],
   "sections": [
@@ -243,14 +243,7 @@
       "kind": "main"
     }
   ],
-  "overrides": [
-    {
-      "kind": "main_drop",
-      "time": 5,
-      "action": "add",
-      "note": "user-added"
-    }
-  ],
+  "overrides": [],
   "analyzer": {
     "version": "0.2.0-native-dsp",
     "odfRate": 200,
@@ -258,5 +251,5 @@
     "maxBpm": 200,
     "delta": 0.7
   },
-  "generatedAt": "2026-05-13T18:51:17.633Z"
+  "generatedAt": "2026-05-13T20:43:12.754Z"
 }

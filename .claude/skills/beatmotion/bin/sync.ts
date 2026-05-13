@@ -46,7 +46,14 @@ type Animation = {
   original: string;
   proposed: string;
   rationale: string;
+  weakMatch: boolean;
+  deltaSec: number;
 };
+
+// Anything farther than this from the original frame is a weak alignment —
+// we still surface it but flag it so the caller can warn the user instead
+// of presenting a misleading "aligned to beat" rationale.
+const WEAK_MATCH_THRESHOLD_SEC = 0.5;
 
 function nearestBeatIndex(targetFrame: number, beats: Beat[]): number {
   if (beats.length === 0) return -1;
@@ -75,22 +82,33 @@ function lineCol(source: string, offset: number): { line: number; column: number
 }
 
 function findInterpolate(source: string, beats: BeatsFile): Animation[] {
-  // Match: interpolate(frame, [<start>, <end>], ...)
-  // start and end must be number literals for v1 — we don't touch already-symbolic ranges.
-  const re = /interpolate\s*\(\s*frame\s*,\s*\[\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*\]/g;
+  // Match the full interpolate(...) call up to its closing paren so the
+  // `original` string carries enough context to be unique when the file has
+  // multiple animations sharing the same input range. The tail uses [\s\S]
+  // with a non-greedy quantifier so multi-line argument lists still match.
+  const re = /interpolate\s*\(\s*frame\s*,\s*\[\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*\]([\s\S]*?)\)/g;
   const out: Animation[] = [];
   let m: RegExpExecArray | null;
   let idx = 0;
   while ((m = re.exec(source)) !== null) {
     const startFrame = Number(m[1]);
     const endFrame = Number(m[2]);
+    const tail = m[3];
+    // Frame 0 is "video start" — never retarget it. Only the end frame is
+    // a candidate for beat alignment.
+    if (endFrame === 0) continue;
     const targetIdx = nearestBeatIndex(endFrame, beats.beats);
     if (targetIdx < 0) continue;
     const targetBeat = beats.beats[targetIdx];
     if (targetBeat.frame === endFrame) continue;
+    const deltaSec = Math.abs(targetBeat.frame - endFrame) / beats.fps;
+    const weakMatch = deltaSec > WEAK_MATCH_THRESHOLD_SEC;
     const { line, column } = lineCol(source, m.index);
     const original = m[0];
-    const proposed = `interpolate(frame, [${startFrame}, beats[${targetIdx}].frame]`;
+    const proposed = `interpolate(frame, [${startFrame}, beats[${targetIdx}].frame]${tail})`;
+    const rationale = weakMatch
+      ? `WEAK MATCH (${deltaSec.toFixed(2)}s off): end frame ${endFrame} → beat ${targetIdx} at frame ${targetBeat.frame} (${targetBeat.time.toFixed(3)}s). Consider keeping as-is or running override to add a beat near ${(endFrame / beats.fps).toFixed(2)}s.`
+      : `Aligns end frame ${endFrame} to beat ${targetIdx} (frame ${targetBeat.frame}, ${targetBeat.time.toFixed(3)}s, ${deltaSec.toFixed(3)}s delta).`;
     out.push({
       id: `interp-${idx++}`,
       kind: "interpolate",
@@ -98,31 +116,43 @@ function findInterpolate(source: string, beats: BeatsFile): Animation[] {
       column,
       original,
       proposed,
-      rationale: `Aligns end frame ${endFrame} to beat ${targetIdx} (frame ${targetBeat.frame}, ${targetBeat.time.toFixed(3)}s).`,
+      rationale,
+      weakMatch,
+      deltaSec,
     });
   }
   return out;
 }
 
 function findSpring(source: string, beats: BeatsFile): Animation[] {
-  // Match: spring({ ..., frame: <something> ... }) where there's a `delayInFrames` or similar.
-  // For v1, we only target literal `delayInFrames: <number>` inside a spring(...) call.
-  const re = /spring\s*\(\s*\{[^}]*delayInFrames\s*:\s*(\d+(?:\.\d+)?)[^}]*\}/g;
+  // Match: spring({ ..., delayInFrames: <number>, ... }). The body uses
+  // [\s\S]*? so multi-line config objects still match. The non-greedy form
+  // stops at the first `}` after `delayInFrames`, which is the right boundary
+  // unless the body itself contains a nested object literal — for now that
+  // edge case falls through and the caller can hand-edit.
+  const re = /spring\s*\(\s*\{[\s\S]*?delayInFrames\s*:\s*(\d+(?:\.\d+)?)[\s\S]*?\}/g;
   const out: Animation[] = [];
   let m: RegExpExecArray | null;
   let idx = 0;
   while ((m = re.exec(source)) !== null) {
     const delay = Number(m[1]);
+    // delayInFrames: 0 means "no delay" — don't retarget it to a non-zero beat.
+    if (delay === 0) continue;
     const targetIdx = nearestBeatIndex(delay, beats.beats);
     if (targetIdx < 0) continue;
     const targetBeat = beats.beats[targetIdx];
     if (targetBeat.frame === delay) continue;
+    const deltaSec = Math.abs(targetBeat.frame - delay) / beats.fps;
+    const weakMatch = deltaSec > WEAK_MATCH_THRESHOLD_SEC;
     const { line, column } = lineCol(source, m.index);
     const original = m[0];
     const proposed = original.replace(
       /delayInFrames\s*:\s*\d+(?:\.\d+)?/,
       `delayInFrames: beats[${targetIdx}].frame`
     );
+    const rationale = weakMatch
+      ? `WEAK MATCH (${deltaSec.toFixed(2)}s off): spring delay ${delay} → beat ${targetIdx} at frame ${targetBeat.frame}. Consider keeping as-is.`
+      : `Aligns spring delay frame ${delay} to beat ${targetIdx} (frame ${targetBeat.frame}, ${targetBeat.time.toFixed(3)}s, ${deltaSec.toFixed(3)}s delta).`;
     out.push({
       id: `spring-${idx++}`,
       kind: "spring",
@@ -130,23 +160,30 @@ function findSpring(source: string, beats: BeatsFile): Animation[] {
       column,
       original,
       proposed,
-      rationale: `Aligns spring delay frame ${delay} to beat ${targetIdx} (frame ${targetBeat.frame}, ${targetBeat.time.toFixed(3)}s).`,
+      rationale,
+      weakMatch,
+      deltaSec,
     });
   }
   return out;
 }
 
 function findSequence(source: string, beats: BeatsFile): Animation[] {
-  // Match: <Sequence ... from={<number>} ...>
-  const re = /<Sequence\b([^>]*?)from=\{(\d+(?:\.\d+)?)\}([^>]*)>/g;
+  // Match: <Sequence ... from={<number>} ...> — including attributes split
+  // across lines. [\s\S]*? lets the attribute list span newlines, while the
+  // closing `>` (not `/>`) anchors the match to opening tags.
+  const re = /<Sequence\b([\s\S]*?)from=\{(\d+(?:\.\d+)?)\}([\s\S]*?)>/g;
   const out: Animation[] = [];
   let m: RegExpExecArray | null;
   let idx = 0;
   while ((m = re.exec(source)) !== null) {
     const from = Number(m[2]);
+    // <Sequence from={0}> means "start of video" — never retarget it.
+    if (from === 0) continue;
     // Prefer aligning to a drop if one is near; otherwise nearest beat.
     let proposedExpr = "";
-    let rationale = "";
+    let rationaleBody = "";
+    let targetFrame = 0;
     const nearestDrop = beats.drops.reduce<{ idx: number; dist: number } | null>(
       (acc, d, i) => {
         const dist = Math.abs(d.frame - from);
@@ -158,18 +195,25 @@ function findSequence(source: string, beats: BeatsFile): Animation[] {
     if (nearestDrop && nearestDrop.dist < 60) {
       const drop = beats.drops[nearestDrop.idx];
       proposedExpr = `drops[${nearestDrop.idx}].frame`;
-      rationale = `Aligns Sequence start ${from} to ${drop.kind} at frame ${drop.frame} (${drop.time.toFixed(2)}s).`;
+      targetFrame = drop.frame;
+      rationaleBody = `Sequence start ${from} → ${drop.kind} at frame ${drop.frame} (${drop.time.toFixed(2)}s)`;
     } else {
       const targetIdx = nearestBeatIndex(from, beats.beats);
       if (targetIdx < 0) continue;
       const beat = beats.beats[targetIdx];
       if (beat.frame === from) continue;
       proposedExpr = `beats[${targetIdx}].frame`;
-      rationale = `Aligns Sequence start ${from} to beat ${targetIdx} (frame ${beat.frame}, ${beat.time.toFixed(3)}s).`;
+      targetFrame = beat.frame;
+      rationaleBody = `Sequence start ${from} → beat ${targetIdx} at frame ${beat.frame} (${beat.time.toFixed(3)}s)`;
     }
+    const deltaSec = Math.abs(targetFrame - from) / beats.fps;
+    const weakMatch = deltaSec > WEAK_MATCH_THRESHOLD_SEC;
     const { line, column } = lineCol(source, m.index);
     const original = m[0];
     const proposed = original.replace(/from=\{\d+(?:\.\d+)?\}/, `from={${proposedExpr}}`);
+    const rationale = weakMatch
+      ? `WEAK MATCH (${deltaSec.toFixed(2)}s off): ${rationaleBody}. Consider keeping as-is.`
+      : `Aligns ${rationaleBody}, ${deltaSec.toFixed(3)}s delta.`;
     out.push({
       id: `seq-${idx++}`,
       kind: "Sequence",
@@ -178,6 +222,8 @@ function findSequence(source: string, beats: BeatsFile): Animation[] {
       original,
       proposed,
       rationale,
+      weakMatch,
+      deltaSec,
     });
   }
   return out;
@@ -220,6 +266,8 @@ async function main() {
     hasBeatsImport,
     summary: {
       total: animations.length,
+      strongMatches: animations.filter((a) => !a.weakMatch).length,
+      weakMatches: animations.filter((a) => a.weakMatch).length,
       byKind: animations.reduce<Record<string, number>>((acc, a) => {
         acc[a.kind] = (acc[a.kind] ?? 0) + 1;
         return acc;
