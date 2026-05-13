@@ -1,17 +1,18 @@
 ---
 name: beatmotion
-description: Sync Remotion animations to music beat drops. Use whenever the user wants to align video animations to musical moments - phrases like "sync this to the beat", "match the drop", "the music doesn't line up with the animation", or when they mention an audio file alongside a Remotion composition. Detects beats, BPM (any tempo), drops, and sections from any audio file at its native sample rate, then proposes per-animation edits to Remotion source code.
+description: Sync Remotion animations to music beat drops. Use whenever the user wants to align video animations to musical moments - phrases like "sync this to the beat", "match the drop", "the music doesn't line up with the animation", or when they mention an audio file alongside a Remotion composition. Detects beats, BPM (any tempo), drops, and sections from any audio file at its native sample rate, then either scaffolds a starter Remotion composition or proposes per-animation edits to existing code.
 ---
 
 # beatmotion
 
-A Claude Code skill that syncs Remotion animations to music. The user describes what they want in natural language; you handle everything else — locating files, running the signal-processing pipeline, proposing edits, applying them.
+A Claude Code skill that syncs Remotion animations to music. The user describes what they want in natural language; you handle everything else — locating files, running the signal-processing pipeline, scaffolding a starter composition when needed, proposing edits, applying them.
 
 ## What this skill does
 
 1. **Detects beats** in any audio file (MP3, WAV, FLAC, Opus, AAC, etc.) at its native sample rate. BPM is computed via autocorrelation of an onset envelope and works for any tempo in the 60–200 BPM range out of the box.
-2. **Proposes edits** to a Remotion `.tsx` composition: every `interpolate(frame, [a,b], ...)`, `spring({ delayInFrames: N })`, and `<Sequence from={N}>` gets a beat-aligned suggestion with a rationale.
-3. **Applies corrections** via natural language ("drop at 0:42", "remove beat at 1:15") to patch the analyzed sidecar.
+2. **Scaffolds** a starter Remotion `Composition.tsx` from a beats sidecar for users with no existing composition: section-anchored `<Sequence>` blocks, beat-strength-aware transitions, drop-emphasis effects. Optionally binds image media.
+3. **Proposes edits** to an existing Remotion `.tsx` composition: every `interpolate(frame, [a,b], ...)`, `spring({ delayInFrames: N })`, and `<Sequence from={N}>` gets a beat-aligned suggestion with a rationale and confidence (weak matches are flagged, not silently applied).
+4. **Applies corrections** via natural language ("drop at 0:42", "remove beat at 1:15") to patch the analyzed sidecar.
 
 ## How you (Claude) drive this skill
 
@@ -63,17 +64,21 @@ If the script exits with code 3 (install failed), show the error and tell the us
 
 ### Step 1 — figure out what the user wants
 
-Listen for the three sub-flows:
+Listen for the four sub-flows:
 
 | User says... | Run |
 |---|---|
 | "analyze this song", "detect beats in song.mp3", "what's the bpm" | **Analyze flow** |
+| "scaffold a comp", "make me a video from this mp3", "I just have an mp3" | **Scaffold flow** |
 | "sync the animations", "align this to the beats", "now apply it" | **Sync flow** |
 | "the drop is actually at...", "the beat at X is wrong" | **Override flow** |
 
 If the user invokes `/beatmotion` with no clear sub-flow, ask them what they want.
 
-If the user gives an audio file AND a `.tsx` composition in one go, do **Analyze → Sync** back-to-back without asking.
+Decision rules for ambiguous "sync my mp3 to my video" requests:
+- User gives an audio file AND a `.tsx` composition that already contains literal frame numbers → **Analyze → Sync**.
+- User gives an audio file AND no `.tsx` (or an empty one) → **Analyze → Scaffold**, then offer Sync as a follow-up if they want to refine.
+- User gives an audio file AND a `.tsx` with no literal frames (all symbolic already) → ask whether they want to scaffold a new comp or skip.
 
 ## Analyze flow
 
@@ -96,6 +101,31 @@ If the user gives an audio file AND a `.tsx` composition in one go, do **Analyze
    - If the `bpmCurve` shows any 1-second window deviating by more than 5 BPM from the global value, flag the tempo change explicitly.
 5. Ask: "Run /beatmotion sync now to wire this into your Remotion source?"
 
+## Scaffold flow
+
+**Goal:** generate a starter `Composition.tsx` from a `beats.json` so a user with no existing composition can go from mp3 to render-ready video in one step.
+
+1. Verify a `beats.json` exists. If not, run the Analyze flow first.
+2. Resolve the output target:
+   - Default to `src/Composition.tsx` if a `src/` directory exists, otherwise `./Composition.tsx`.
+   - If the file already exists, ask before overwriting (or run with `--force` if the user explicitly approves replacement).
+3. Resolve optional inputs from the user message:
+   - Composition name (`--comp`) — default `BeatComp`.
+   - Audio source path (`--audio`) — if not specified, derives from `beats.audio` in the sidecar. The scaffold emits `<Audio src="/<basename>" />` assuming the file will live in the project's `public/` folder.
+   - Media directory (`--media`) — if the user mentions images, clips, or "use my assets", point this at the folder. The scaffold imports each image and cycles them per beat.
+4. Run:
+   ```bash
+   bun run "$SKILL_DIR/bin/scaffold.ts" "<beats.json>" --tsx "<out.tsx>" [--audio <path>] [--media <dir>] [--comp <name>] [--force]
+   ```
+5. The script copies `useBeats.ts` and `transitions.ts` next to the output `.tsx` automatically. If those files already exist there, it leaves them as-is.
+6. Read back the generated `.tsx` to confirm it looks reasonable (e.g., no leftover `__PLACEHOLDER__` strings, imports resolve).
+7. Tell the user:
+   - Where the file landed.
+   - That they should drop the audio file into their Remotion project's `public/` folder.
+   - The `<Composition>` registration snippet to add to their root file (the script prints this; relay it verbatim).
+   - The render command: `npx remotion render <comp-name>`.
+8. Offer the Sync flow as a follow-up if they want to refine the auto-generated cuts. The Sync flow is idempotent on scaffolded comps — it skips symbolic frame expressions and only proposes changes for any literal frame numbers the user manually added.
+
 ## Sync flow
 
 **Goal:** propose beat-aligned edits to a Remotion `.tsx` file and apply the approved ones.
@@ -109,17 +139,19 @@ If the user gives an audio file AND a `.tsx` composition in one go, do **Analyze
    bun run "$SKILL_DIR/bin/sync.ts" "<composition.tsx>" "<beats.json>"
    ```
 4. Parse the JSON output (stdout). It includes a `summary` and an `animations` array.
-5. If `summary.total === 0`, tell the user: "No animations to sync — all `interpolate`/`spring`/`Sequence` calls in this file already use symbolic frame expressions, or there are none." Stop.
-6. Briefly summarize: "Found N candidates (X interpolate, Y spring, Z Sequence). Walk through them?"
-7. For each animation in source order (one at a time), use AskUserQuestion with:
+5. If `summary.total === 0`, the file has nothing to retarget. Don't stop silently — tell the user:
+   - "No literal frame numbers found in this composition. beatmotion can either retarget existing literals, or scaffold a starter composition from the beats data."
+   - Offer two paths: (a) point the skill at a different `.tsx` that has animations to retarget, or (b) run the **Scaffold flow** to generate a starter composition wired to the beats sidecar. If the user picks (b), proceed to the Scaffold flow with this `beats.json`.
+6. Briefly summarize: "Found N candidates (X interpolate, Y spring, Z Sequence). M weak matches flagged. Walk through them?"
+7. For each animation in source order (one at a time), prompt the user. If the Conductor `mcp__conductor__AskUserQuestion` tool is available, use it; otherwise ask in plain text. Always include:
    - Re-ground: file path, line:column, animation kind
-   - Show the `rationale` verbatim
+   - Show the `rationale` verbatim — note that the sync script flags entries with `weakMatch: true` when the delta exceeds 0.5s. For those, lean toward recommending "Skip" rather than "Apply."
    - Show `original` → `proposed`
    - Options:
-     - **A) Apply this edit** (recommended if the time delta is < 0.2s from the original beat)
-     - **B) Skip — keep as-is**
+     - **A) Apply this edit** (recommended if `weakMatch: false`)
+     - **B) Skip — keep as-is** (recommended if `weakMatch: true`)
      - **C) Stop reviewing** (apply nothing further)
-8. For approved edits, use the Edit tool with `old_string = original` and `new_string = proposed`. The original strings are designed to be unique within the file.
+8. For approved edits, use the Edit tool with `old_string = original` and `new_string = proposed`. The captured `original` strings include enough surrounding context to be unique in the file *most* of the time — but if Edit returns "old_string not unique" (common when a file has duplicate identical `interpolate` calls), read the file using the `line` and `column` from the sync output, expand the `old_string` with surrounding lines until it's unique, and retry. Never use `replace_all: true` here — animations that look identical should still be reviewed individually because their target beats may differ.
 9. Once any edit is applied, ensure the file has access to the beats data:
    - Check the `hasBeatsImport` field in the sync output.
    - If `false`, insert after the last existing `import` line:
@@ -187,19 +219,33 @@ const opacity = interpolate(frame, [0, beats.frameOf(2)], [0, 1]);
 
 ## Examples of end-to-end flows
 
-### "Make my launch video sync to song.mp3"
+### "Make my launch video sync to song.mp3" (existing composition path)
 
 ```
 You: 1. Bootstrap (one-time bun install if needed)
      2. Grep the project for <Composition fps={...} → 30
      3. bun run $SKILL_DIR/bin/analyze.ts /abs/path/song.mp3 --fps 30
      4. Report: "128 BPM, main drop at 0:32, 47 beats, 3 sections"
-     5. AskUser: "Run sync now?" → Yes
+     5. Ask: "Run sync now?" → Yes
      6. Find the only *.tsx with <Composition> → src/Composition.tsx
      7. bun run $SKILL_DIR/bin/sync.ts src/Composition.tsx song.beats.json
-     8. Walk through 5 proposed edits one by one with AskUserQuestion
+     8. Walk through 5 proposed edits one by one (4 strong, 1 weak match flagged)
      9. Apply approved edits + insert `import beatsData from "./song.beats.json"`
      10. Report: "Applied 4 of 5. Render with `npx remotion render`."
+```
+
+### "I just have an mp3, build me something" (scaffold path)
+
+```
+You: 1. Bootstrap (one-time bun install if needed)
+     2. No existing composition found in the project.
+     3. bun run $SKILL_DIR/bin/analyze.ts /abs/path/song.mp3 --fps 30
+     4. Report: "128 BPM, main drop at 0:32, 47 beats, 3 sections"
+     5. Ask: "Scaffold a starter Composition.tsx now?" → Yes
+     6. bun run $SKILL_DIR/bin/scaffold.ts /abs/path/song.beats.json --tsx src/Composition.tsx --comp Launch
+     7. Confirm output exists + useBeats.ts + transitions.ts were copied alongside.
+     8. Relay the <Composition> registration snippet + "drop song.mp3 in public/".
+     9. Offer: "Want to refine any of the auto-cuts? Run sync next." (usually no — scaffolded comps use symbolic frames already.)
 ```
 
 ### "The drop is actually at 28 seconds, not 32"

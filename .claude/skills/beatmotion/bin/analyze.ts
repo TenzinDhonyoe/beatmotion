@@ -235,6 +235,19 @@ async function main() {
     strength: Math.round((p.strength / maxStrength) * 1000) / 1000,
   }));
 
+  // The log-energy derivative ODF can't fire on the very first frame (there's
+  // no prior frame to diff against). For tracks that start on a downbeat, this
+  // means the analyzer reports its first beat one beat-interval late. Detect
+  // that case and prepend an implicit beat at t=0 so `beats[0]` matches the
+  // music's beat 0 instead of beat 1.
+  if (globalBpm > 0 && beats.length > 0) {
+    const beatInterval = 60 / globalBpm;
+    const firstBeatTime = beats[0].time;
+    if (firstBeatTime > beatInterval * 0.6 && firstBeatTime < beatInterval * 1.4) {
+      beats.unshift({ time: 0, frame: 0, strength: beats[0].strength });
+    }
+  }
+
   console.error("computing drops + sections from energy envelope...");
   const { times, energy } = computeEnergyEnvelope(mono, sampleRate, 0.5);
   const { drops, sections } = detectDropsAndSections(times, energy, args.fps);

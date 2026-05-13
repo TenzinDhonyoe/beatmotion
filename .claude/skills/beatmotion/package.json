@@ -1,12 +1,13 @@
 {
   "name": "beatmotion-skill",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Claude Code skill: sync Remotion animations to music beat drops.",
   "type": "module",
   "private": true,
   "scripts": {
     "analyze": "bun run bin/analyze.ts",
     "sync": "bun run bin/sync.ts",
+    "scaffold": "bun run bin/scaffold.ts",
     "override": "bun run bin/override.ts",
     "gen-test-wav": "bun run scripts/gen-test-wav.ts"
   },
