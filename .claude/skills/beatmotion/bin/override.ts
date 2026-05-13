@@ -42,7 +42,7 @@ type BeatsFile = {
   generatedAt?: string;
 };
 
-function parseTime(s: string): number | null {
+export function parseTime(s: string): number | null {
   // "0:42", "0:42.5", "42", "42.5"
   const m = s.trim().match(/^(?:(\d+):)?(\d+(?:\.\d+)?)$/);
   if (!m) return null;
@@ -51,11 +51,11 @@ function parseTime(s: string): number | null {
   return min * 60 + sec;
 }
 
-type ParsedCorrection =
+export type ParsedCorrection =
   | { action: "add"; kind: "main_drop" | "secondary_drop" | "beat"; time: number }
   | { action: "remove"; kind: "drop" | "beat"; time: number };
 
-function parseCorrection(input: string): ParsedCorrection | null {
+export function parseCorrection(input: string): ParsedCorrection | null {
   const s = input.trim().toLowerCase();
 
   let m = s.match(/^remove\s+drop\s+at\s+(\S+)$/);
@@ -197,7 +197,9 @@ async function main() {
   console.log(JSON.stringify({ ok: true, result, file: beatsPath }));
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(2);
-});
+if (import.meta.main) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(2);
+  });
+}

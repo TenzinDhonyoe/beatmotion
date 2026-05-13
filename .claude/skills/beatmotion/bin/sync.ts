@@ -53,9 +53,9 @@ type Animation = {
 // Anything farther than this from the original frame is a weak alignment —
 // we still surface it but flag it so the caller can warn the user instead
 // of presenting a misleading "aligned to beat" rationale.
-const WEAK_MATCH_THRESHOLD_SEC = 0.5;
+export const WEAK_MATCH_THRESHOLD_SEC = 0.5;
 
-function nearestBeatIndex(targetFrame: number, beats: Beat[]): number {
+export function nearestBeatIndex(targetFrame: number, beats: Beat[]): number {
   if (beats.length === 0) return -1;
   let bestIdx = 0;
   let bestDist = Infinity;
@@ -81,7 +81,7 @@ function lineCol(source: string, offset: number): { line: number; column: number
   return { line, column: col };
 }
 
-function findInterpolate(source: string, beats: BeatsFile): Animation[] {
+export function findInterpolate(source: string, beats: BeatsFile): Animation[] {
   // Match the full interpolate(...) call up to its closing paren so the
   // `original` string carries enough context to be unique when the file has
   // multiple animations sharing the same input range. The tail uses [\s\S]
@@ -124,7 +124,7 @@ function findInterpolate(source: string, beats: BeatsFile): Animation[] {
   return out;
 }
 
-function findSpring(source: string, beats: BeatsFile): Animation[] {
+export function findSpring(source: string, beats: BeatsFile): Animation[] {
   // Match: spring({ ..., delayInFrames: <number>, ... }). The body uses
   // [\s\S]*? so multi-line config objects still match. The non-greedy form
   // stops at the first `}` after `delayInFrames`, which is the right boundary
@@ -168,7 +168,7 @@ function findSpring(source: string, beats: BeatsFile): Animation[] {
   return out;
 }
 
-function findSequence(source: string, beats: BeatsFile): Animation[] {
+export function findSequence(source: string, beats: BeatsFile): Animation[] {
   // Match: <Sequence ... from={<number>} ...> — including attributes split
   // across lines. [\s\S]*? lets the attribute list span newlines, while the
   // closing `>` (not `/>`) anchors the match to opening tags.
@@ -279,7 +279,9 @@ async function main() {
   console.log(JSON.stringify(out, null, 2));
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+if (import.meta.main) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}

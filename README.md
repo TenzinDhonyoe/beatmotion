@@ -56,6 +56,20 @@ The skill recognizes natural language for analyze / scaffold / sync / override f
 - **Edits existing Remotion source** to replace literal frame numbers with `beats[N].frame` / `drops[N].frame` expressions. Multi-line `interpolate`/`spring`/`<Sequence>` calls are supported. Already-symbolic expressions are skipped (idempotent). Weak matches (>0.5s from any beat) are flagged so the user can decline.
 - **Patches mistakes** via natural-language overrides: "drop at 0:42", "remove beat at 1:15".
 
+## Troubleshooting
+
+**`MP3 decode failed (crc32 validation)`** — some real-world MP3s trip the bundled `audio-decode` library. Convert to WAV and retry:
+
+```bash
+# macOS
+afconvert -f WAVE -d LEI16 song.mp3 song.wav
+
+# cross-platform
+ffmpeg -i song.mp3 song.wav
+```
+
+Then point the skill at the WAV. The roadmap covers swapping the decoder so this works automatically.
+
 ## Full docs
 
 See [`.claude/skills/beatmotion/SKILL.md`](.claude/skills/beatmotion/SKILL.md) for the skill instructions Claude follows, and [`.claude/skills/beatmotion/bin/dsp.ts`](.claude/skills/beatmotion/bin/dsp.ts) for the ~250-line signal-processing pipeline (no external DSP deps, no FFT, runs at the file's native sample rate).

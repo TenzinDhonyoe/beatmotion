@@ -1,0 +1,16 @@
+{
+  "audio": "silence-3s.wav",
+  "duration": 3,
+  "sampleRate": 44100,
+  "fps": 30,
+  "bpm": 0,
+  "bpmConfidence": 0,
+  "bpmCurve": [],
+  "beats": [],
+  "drops": [],
+  "sections": [
+    { "start": 0, "end": 3, "kind": "intro" }
+  ],
+  "overrides": [],
+  "generatedAt": "2026-05-13T00:00:00.000Z"
+}

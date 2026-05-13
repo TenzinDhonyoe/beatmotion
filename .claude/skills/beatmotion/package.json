@@ -9,7 +9,8 @@
     "sync": "bun run bin/sync.ts",
     "scaffold": "bun run bin/scaffold.ts",
     "override": "bun run bin/override.ts",
-    "gen-test-wav": "bun run scripts/gen-test-wav.ts"
+    "gen-test-wav": "bun run scripts/gen-test-wav.ts",
+    "test": "bun test"
   },
   "devDependencies": {
     "@types/bun": "latest"
