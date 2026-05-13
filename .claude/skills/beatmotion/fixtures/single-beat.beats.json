@@ -1,0 +1,18 @@
+{
+  "audio": "single-beat.wav",
+  "duration": 2,
+  "sampleRate": 44100,
+  "fps": 30,
+  "bpm": 0,
+  "bpmConfidence": 0,
+  "bpmCurve": [],
+  "beats": [
+    { "time": 1.0, "frame": 30, "strength": 1.0 }
+  ],
+  "drops": [],
+  "sections": [
+    { "start": 0, "end": 2, "kind": "main" }
+  ],
+  "overrides": [],
+  "generatedAt": "2026-05-13T00:00:00.000Z"
+}

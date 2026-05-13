@@ -188,7 +188,26 @@ async function main() {
   const buf = await readFile(audioPath);
 
   console.error("decoding...");
-  const { channelData, sampleRate } = await decode(new Uint8Array(buf));
+  let decoded;
+  try {
+    decoded = await decode(new Uint8Array(buf));
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const ext = audioPath.slice(audioPath.lastIndexOf(".")).toLowerCase();
+    if (ext === ".mp3") {
+      console.error(
+        `\nerror: MP3 decode failed (${msg.split("\n")[0]}).\n` +
+          `Some real-world MP3s trip the bundled decoder. Convert to WAV and retry:\n` +
+          `  macOS:        afconvert -f WAVE -d LEI16 "${audioPath}" "${audioPath.replace(/\.mp3$/i, ".wav")}"\n` +
+          `  cross-platform: ffmpeg -i "${audioPath}" "${audioPath.replace(/\.mp3$/i, ".wav")}"\n` +
+          `Then: bun run bin/analyze.ts "${audioPath.replace(/\.mp3$/i, ".wav")}"`
+      );
+    } else {
+      console.error(`error: audio decode failed for ${audioPath}: ${msg}`);
+    }
+    process.exit(1);
+  }
+  const { channelData, sampleRate } = decoded;
   const duration = channelData[0].length / sampleRate;
   console.error(
     `decoded: ${duration.toFixed(2)}s @ ${sampleRate}Hz, ${channelData.length} channel(s)`
@@ -283,7 +302,9 @@ async function main() {
   console.log(outPath);
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+if (import.meta.main) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}
