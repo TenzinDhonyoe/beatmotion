@@ -1,0 +1,262 @@
+{
+  "audio": "test-click.wav",
+  "duration": 16,
+  "sampleRate": 44100,
+  "fps": 30,
+  "bpm": 119.9,
+  "bpmConfidence": 1,
+  "bpmCurve": [
+    {
+      "time": 3,
+      "bpm": 119.9,
+      "confidence": 1
+    },
+    {
+      "time": 4,
+      "bpm": 119.8,
+      "confidence": 1
+    },
+    {
+      "time": 5,
+      "bpm": 119.9,
+      "confidence": 1
+    },
+    {
+      "time": 6,
+      "bpm": 119.9,
+      "confidence": 1
+    },
+    {
+      "time": 7,
+      "bpm": 119.9,
+      "confidence": 1
+    },
+    {
+      "time": 8,
+      "bpm": 119.9,
+      "confidence": 1
+    },
+    {
+      "time": 9,
+      "bpm": 119.9,
+      "confidence": 1
+    },
+    {
+      "time": 10,
+      "bpm": 119.9,
+      "confidence": 1
+    },
+    {
+      "time": 11,
+      "bpm": 119.8,
+      "confidence": 1
+    },
+    {
+      "time": 12,
+      "bpm": 119.9,
+      "confidence": 1
+    },
+    {
+      "time": 13,
+      "bpm": 119.8,
+      "confidence": 1
+    }
+  ],
+  "beats": [
+    {
+      "time": 0.5,
+      "frame": 15,
+      "strength": 0.398
+    },
+    {
+      "time": 1,
+      "frame": 30,
+      "strength": 0.345
+    },
+    {
+      "time": 1.5,
+      "frame": 45,
+      "strength": 0.266
+    },
+    {
+      "time": 2.005,
+      "frame": 60,
+      "strength": 0.296
+    },
+    {
+      "time": 2.505,
+      "frame": 75,
+      "strength": 0.413
+    },
+    {
+      "time": 3.005,
+      "frame": 90,
+      "strength": 0.365
+    },
+    {
+      "time": 3.505,
+      "frame": 105,
+      "strength": 0.298
+    },
+    {
+      "time": 4.01,
+      "frame": 120,
+      "strength": 0.225
+    },
+    {
+      "time": 4.51,
+      "frame": 135,
+      "strength": 0.425
+    },
+    {
+      "time": 5.01,
+      "frame": 150,
+      "strength": 0.382
+    },
+    {
+      "time": 5.51,
+      "frame": 165,
+      "strength": 0.322
+    },
+    {
+      "time": 6.01,
+      "frame": 180,
+      "strength": 0.229
+    },
+    {
+      "time": 6.515,
+      "frame": 195,
+      "strength": 0.387
+    },
+    {
+      "time": 7.015,
+      "frame": 210,
+      "strength": 0.4
+    },
+    {
+      "time": 7.515,
+      "frame": 225,
+      "strength": 0.348
+    },
+    {
+      "time": 8.015,
+      "frame": 240,
+      "strength": 0.789
+    },
+    {
+      "time": 8.515,
+      "frame": 255,
+      "strength": 0.565
+    },
+    {
+      "time": 9.02,
+      "frame": 271,
+      "strength": 0.98
+    },
+    {
+      "time": 9.52,
+      "frame": 286,
+      "strength": 0.927
+    },
+    {
+      "time": 10.02,
+      "frame": 301,
+      "strength": 0.846
+    },
+    {
+      "time": 10.52,
+      "frame": 316,
+      "strength": 0.703
+    },
+    {
+      "time": 11.025,
+      "frame": 331,
+      "strength": 1
+    },
+    {
+      "time": 11.525,
+      "frame": 346,
+      "strength": 0.954
+    },
+    {
+      "time": 12.025,
+      "frame": 361,
+      "strength": 0.888
+    },
+    {
+      "time": 12.525,
+      "frame": 376,
+      "strength": 0.782
+    },
+    {
+      "time": 13.025,
+      "frame": 391,
+      "strength": 0.544
+    },
+    {
+      "time": 13.53,
+      "frame": 406,
+      "strength": 0.972
+    },
+    {
+      "time": 14.03,
+      "frame": 421,
+      "strength": 0.914
+    },
+    {
+      "time": 14.53,
+      "frame": 436,
+      "strength": 0.827
+    },
+    {
+      "time": 15.03,
+      "frame": 451,
+      "strength": 0.662
+    },
+    {
+      "time": 15.535,
+      "frame": 466,
+      "strength": 0.986
+    }
+  ],
+  "drops": [
+    {
+      "time": 5,
+      "frame": 150,
+      "kind": "main_drop"
+    },
+    {
+      "time": 8.75,
+      "frame": 263,
+      "kind": "secondary_drop"
+    }
+  ],
+  "sections": [
+    {
+      "start": 0,
+      "end": 8.75,
+      "kind": "intro"
+    },
+    {
+      "start": 8.75,
+      "end": 15.75,
+      "kind": "main"
+    }
+  ],
+  "overrides": [
+    {
+      "kind": "main_drop",
+      "time": 5,
+      "action": "add",
+      "note": "user-added"
+    }
+  ],
+  "analyzer": {
+    "version": "0.2.0-native-dsp",
+    "odfRate": 200,
+    "minBpm": 60,
+    "maxBpm": 200,
+    "delta": 0.7
+  },
+  "generatedAt": "2026-05-13T18:51:17.633Z"
+}

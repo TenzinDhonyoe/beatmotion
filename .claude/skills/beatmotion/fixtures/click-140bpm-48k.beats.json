@@ -1,0 +1,280 @@
+{
+  "audio": "click-140bpm-48k.wav",
+  "duration": 16,
+  "sampleRate": 48000,
+  "fps": 30,
+  "bpm": 139.8,
+  "bpmConfidence": 1,
+  "bpmCurve": [
+    {
+      "time": 3,
+      "bpm": 139.8,
+      "confidence": 1
+    },
+    {
+      "time": 4,
+      "bpm": 139.8,
+      "confidence": 1
+    },
+    {
+      "time": 5,
+      "bpm": 139.7,
+      "confidence": 1
+    },
+    {
+      "time": 6,
+      "bpm": 139.8,
+      "confidence": 1
+    },
+    {
+      "time": 7,
+      "bpm": 139.8,
+      "confidence": 1
+    },
+    {
+      "time": 8,
+      "bpm": 139.8,
+      "confidence": 1
+    },
+    {
+      "time": 9,
+      "bpm": 139.8,
+      "confidence": 1
+    },
+    {
+      "time": 10,
+      "bpm": 139.8,
+      "confidence": 1
+    },
+    {
+      "time": 11,
+      "bpm": 139.8,
+      "confidence": 1
+    },
+    {
+      "time": 12,
+      "bpm": 139.8,
+      "confidence": 1
+    },
+    {
+      "time": 13,
+      "bpm": 139.8,
+      "confidence": 1
+    }
+  ],
+  "beats": [
+    {
+      "time": 0.425,
+      "frame": 13,
+      "strength": 0.252
+    },
+    {
+      "time": 0.855,
+      "frame": 26,
+      "strength": 0.355
+    },
+    {
+      "time": 1.285,
+      "frame": 39,
+      "strength": 0.42
+    },
+    {
+      "time": 1.715,
+      "frame": 51,
+      "strength": 0.284
+    },
+    {
+      "time": 2.14,
+      "frame": 64,
+      "strength": 0.317
+    },
+    {
+      "time": 2.57,
+      "frame": 77,
+      "strength": 0.387
+    },
+    {
+      "time": 3,
+      "frame": 90,
+      "strength": 0.446
+    },
+    {
+      "time": 3.425,
+      "frame": 103,
+      "strength": 0.252
+    },
+    {
+      "time": 3.855,
+      "frame": 116,
+      "strength": 0.355
+    },
+    {
+      "time": 4.285,
+      "frame": 129,
+      "strength": 0.42
+    },
+    {
+      "time": 4.715,
+      "frame": 141,
+      "strength": 0.284
+    },
+    {
+      "time": 5.14,
+      "frame": 154,
+      "strength": 0.317
+    },
+    {
+      "time": 5.57,
+      "frame": 167,
+      "strength": 0.387
+    },
+    {
+      "time": 6,
+      "frame": 180,
+      "strength": 0.445
+    },
+    {
+      "time": 6.425,
+      "frame": 193,
+      "strength": 0.252
+    },
+    {
+      "time": 6.855,
+      "frame": 206,
+      "strength": 0.355
+    },
+    {
+      "time": 7.285,
+      "frame": 219,
+      "strength": 0.42
+    },
+    {
+      "time": 7.715,
+      "frame": 231,
+      "strength": 0.284
+    },
+    {
+      "time": 8.14,
+      "frame": 244,
+      "strength": 0.844
+    },
+    {
+      "time": 8.57,
+      "frame": 257,
+      "strength": 0.932
+    },
+    {
+      "time": 9,
+      "frame": 270,
+      "strength": 1
+    },
+    {
+      "time": 9.425,
+      "frame": 283,
+      "strength": 0.755
+    },
+    {
+      "time": 9.855,
+      "frame": 296,
+      "strength": 0.893
+    },
+    {
+      "time": 10.285,
+      "frame": 309,
+      "strength": 0.97
+    },
+    {
+      "time": 10.71,
+      "frame": 321,
+      "strength": 0.585
+    },
+    {
+      "time": 11.14,
+      "frame": 334,
+      "strength": 0.844
+    },
+    {
+      "time": 11.57,
+      "frame": 347,
+      "strength": 0.932
+    },
+    {
+      "time": 12,
+      "frame": 360,
+      "strength": 1
+    },
+    {
+      "time": 12.425,
+      "frame": 373,
+      "strength": 0.755
+    },
+    {
+      "time": 12.855,
+      "frame": 386,
+      "strength": 0.893
+    },
+    {
+      "time": 13.285,
+      "frame": 399,
+      "strength": 0.97
+    },
+    {
+      "time": 13.71,
+      "frame": 411,
+      "strength": 0.585
+    },
+    {
+      "time": 14.14,
+      "frame": 424,
+      "strength": 0.844
+    },
+    {
+      "time": 14.57,
+      "frame": 437,
+      "strength": 0.932
+    },
+    {
+      "time": 15,
+      "frame": 450,
+      "strength": 1
+    },
+    {
+      "time": 15.425,
+      "frame": 463,
+      "strength": 0.755
+    },
+    {
+      "time": 15.855,
+      "frame": 476,
+      "strength": 0.893
+    }
+  ],
+  "drops": [
+    {
+      "time": 8.75,
+      "frame": 263,
+      "kind": "main_drop"
+    }
+  ],
+  "sections": [
+    {
+      "start": 0,
+      "end": 8.75,
+      "kind": "intro"
+    },
+    {
+      "start": 8.75,
+      "end": 15.75,
+      "kind": "main"
+    }
+  ],
+  "overrides": [],
+  "analyzer": {
+    "version": "0.2.0-native-dsp",
+    "odfRate": 200,
+    "minBpm": 60,
+    "maxBpm": 200,
+    "delta": 0.7
+  },
+  "generatedAt": "2026-05-13T18:35:23.047Z"
+}

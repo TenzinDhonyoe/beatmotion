@@ -1,0 +1,275 @@
+{
+  "audio": "click-90bpm-44k.wav",
+  "duration": 20,
+  "sampleRate": 44100,
+  "fps": 30,
+  "bpm": 89.7,
+  "bpmConfidence": 1,
+  "bpmCurve": [
+    {
+      "time": 3,
+      "bpm": 89.7,
+      "confidence": 1
+    },
+    {
+      "time": 4,
+      "bpm": 89.7,
+      "confidence": 1
+    },
+    {
+      "time": 5,
+      "bpm": 89.7,
+      "confidence": 1
+    },
+    {
+      "time": 6,
+      "bpm": 89.7,
+      "confidence": 1
+    },
+    {
+      "time": 7,
+      "bpm": 89.7,
+      "confidence": 1
+    },
+    {
+      "time": 8,
+      "bpm": 89.7,
+      "confidence": 1
+    },
+    {
+      "time": 9,
+      "bpm": 89.8,
+      "confidence": 1
+    },
+    {
+      "time": 10,
+      "bpm": 89.7,
+      "confidence": 1
+    },
+    {
+      "time": 11,
+      "bpm": 89.8,
+      "confidence": 1
+    },
+    {
+      "time": 12,
+      "bpm": 89.7,
+      "confidence": 1
+    },
+    {
+      "time": 13,
+      "bpm": 89.7,
+      "confidence": 1
+    },
+    {
+      "time": 14,
+      "bpm": 89.7,
+      "confidence": 1
+    },
+    {
+      "time": 15,
+      "bpm": 89.7,
+      "confidence": 1
+    },
+    {
+      "time": 16,
+      "bpm": 89.7,
+      "confidence": 1
+    },
+    {
+      "time": 17,
+      "bpm": 89.7,
+      "confidence": 1
+    }
+  ],
+  "beats": [
+    {
+      "time": 0.665,
+      "frame": 20,
+      "strength": 0.27
+    },
+    {
+      "time": 1.335,
+      "frame": 40,
+      "strength": 0.381
+    },
+    {
+      "time": 2.005,
+      "frame": 60,
+      "strength": 0.296
+    },
+    {
+      "time": 2.67,
+      "frame": 80,
+      "strength": 0.312
+    },
+    {
+      "time": 3.34,
+      "frame": 100,
+      "strength": 0.4
+    },
+    {
+      "time": 4.01,
+      "frame": 120,
+      "strength": 0.219
+    },
+    {
+      "time": 4.675,
+      "frame": 140,
+      "strength": 0.345
+    },
+    {
+      "time": 5.345,
+      "frame": 160,
+      "strength": 0.42
+    },
+    {
+      "time": 6.01,
+      "frame": 180,
+      "strength": 0.229
+    },
+    {
+      "time": 6.68,
+      "frame": 200,
+      "strength": 0.365
+    },
+    {
+      "time": 7.35,
+      "frame": 221,
+      "strength": 0.437
+    },
+    {
+      "time": 8.015,
+      "frame": 240,
+      "strength": 0.27
+    },
+    {
+      "time": 8.685,
+      "frame": 261,
+      "strength": 0.381
+    },
+    {
+      "time": 9.355,
+      "frame": 281,
+      "strength": 0.294
+    },
+    {
+      "time": 10.02,
+      "frame": 301,
+      "strength": 0.312
+    },
+    {
+      "time": 10.69,
+      "frame": 321,
+      "strength": 0.957
+    },
+    {
+      "time": 11.355,
+      "frame": 341,
+      "strength": 0.671
+    },
+    {
+      "time": 12.025,
+      "frame": 361,
+      "strength": 0.889
+    },
+    {
+      "time": 12.695,
+      "frame": 381,
+      "strength": 0.98
+    },
+    {
+      "time": 13.36,
+      "frame": 401,
+      "strength": 0.734
+    },
+    {
+      "time": 14.03,
+      "frame": 421,
+      "strength": 0.916
+    },
+    {
+      "time": 14.7,
+      "frame": 441,
+      "strength": 1
+    },
+    {
+      "time": 15.365,
+      "frame": 461,
+      "strength": 0.791
+    },
+    {
+      "time": 16.035,
+      "frame": 481,
+      "strength": 0.936
+    },
+    {
+      "time": 16.7,
+      "frame": 501,
+      "strength": 0.55
+    },
+    {
+      "time": 17.37,
+      "frame": 521,
+      "strength": 0.846
+    },
+    {
+      "time": 18.04,
+      "frame": 541,
+      "strength": 0.957
+    },
+    {
+      "time": 18.705,
+      "frame": 561,
+      "strength": 0.671
+    },
+    {
+      "time": 19.375,
+      "frame": 581,
+      "strength": 0.887
+    }
+  ],
+  "drops": [
+    {
+      "time": 11.75,
+      "frame": 353,
+      "kind": "secondary_drop"
+    },
+    {
+      "time": 19.75,
+      "frame": 593,
+      "kind": "main_drop"
+    }
+  ],
+  "sections": [
+    {
+      "start": 0,
+      "end": 11.75,
+      "kind": "intro"
+    },
+    {
+      "start": 11.75,
+      "end": 19.25,
+      "kind": "main"
+    },
+    {
+      "start": 19.25,
+      "end": 19.75,
+      "kind": "break"
+    },
+    {
+      "start": 19.75,
+      "end": 19.75,
+      "kind": "main"
+    }
+  ],
+  "overrides": [],
+  "analyzer": {
+    "version": "0.2.0-native-dsp",
+    "odfRate": 200,
+    "minBpm": 60,
+    "maxBpm": 200,
+    "delta": 0.7
+  },
+  "generatedAt": "2026-05-13T18:35:23.073Z"
+}
