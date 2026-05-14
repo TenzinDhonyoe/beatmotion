@@ -26,7 +26,19 @@
 import { readFile } from "node:fs/promises";
 import { resolve, relative, dirname } from "node:path";
 
-type Beat = { time: number; frame: number; strength: number };
+type Beat = {
+  time: number;
+  frame: number;
+  strength: number;
+  // Optional musical-structure fields. Populated by Phase 2+ analyzer; ignored
+  // gracefully when absent (matcher treats undefined → 0/false → no bonus).
+  kind?: "kick" | "snare" | "hat" | "other";
+  barPos?: 1 | 2 | 3 | 4;
+  phrasePos?: number;
+  downbeat?: boolean;
+  synthetic?: boolean;
+  manualOverride?: boolean;
+};
 type Drop = { time: number; frame: number; kind: string };
 
 type BeatsFile = {
@@ -55,6 +67,10 @@ type Animation = {
 // of presenting a misleading "aligned to beat" rationale.
 export const WEAK_MATCH_THRESHOLD_SEC = 0.5;
 
+/**
+ * Pure-distance nearest-beat lookup. Preserved for back-compat with the public
+ * API + existing tests. Internal matching uses `bestBeatForFrame` instead.
+ */
 export function nearestBeatIndex(targetFrame: number, beats: Beat[]): number {
   if (beats.length === 0) return -1;
   let bestIdx = 0;
@@ -67,6 +83,92 @@ export function nearestBeatIndex(targetFrame: number, beats: Beat[]): number {
     }
   }
   return bestIdx;
+}
+
+export type MatchOpts = {
+  downbeatBonus?: number;
+  barOneBonus?: number;
+  phraseBonus?: number;
+  kickBoost?: number;
+  manualOverrideBonus?: number;
+  distancePenalty?: number;
+};
+
+export type MatchResult = {
+  idx: number;
+  deltaFrames: number;
+  score: number;
+  reasonTags: string[];
+};
+
+const DEFAULT_MATCH_OPTS: Required<MatchOpts> = {
+  downbeatBonus: 1.5,
+  barOneBonus: 0.5,
+  phraseBonus: 0.8,
+  kickBoost: 0.3,
+  manualOverrideBonus: 2.0,
+  distancePenalty: 0.1,
+};
+
+/**
+ * Musically-aware beat picker. Scores each beat by:
+ *
+ *   (strength + 0.1)
+ *   × (1 + downbeatBonus·isDownbeat + barOneBonus·(barPos===1)
+ *        + phraseBonus·(phrasePos===0) + kickBoost·(kind==="kick")
+ *        + manualOverrideBonus·isManualOverride)
+ *   / (1 + distancePenalty × |targetFrame - b.frame|)
+ *
+ * The `+0.1` baseline keeps synthetic grid beats (strength 0, from Phase 3
+ * tempo-locking) competitive. Bonuses default to 0 when the corresponding
+ * field is absent — so the matcher degrades to a strength-weighted nearest
+ * picker on legacy sidecars and gets progressively smarter as Phase 2/3
+ * analyzer output lands.
+ *
+ * Picks the highest-scoring beat in the array. Returns idx, signed delta,
+ * score, and a short list of reasonTags (e.g. ["downbeat", "kick"]) the
+ * caller can splice into a rationale.
+ */
+export function bestBeatForFrame(
+  targetFrame: number,
+  beats: Beat[],
+  opts: MatchOpts = {}
+): MatchResult {
+  if (beats.length === 0) return { idx: -1, deltaFrames: 0, score: 0, reasonTags: [] };
+  const o = { ...DEFAULT_MATCH_OPTS, ...opts };
+
+  let bestIdx = 0;
+  let bestScore = -Infinity;
+  for (let i = 0; i < beats.length; i++) {
+    const b = beats[i];
+    const delta = Math.abs(b.frame - targetFrame);
+    let bonusMul = 1;
+    if (b.downbeat) bonusMul += o.downbeatBonus;
+    if (b.barPos === 1) bonusMul += o.barOneBonus;
+    if (b.phrasePos === 0) bonusMul += o.phraseBonus;
+    if (b.kind === "kick") bonusMul += o.kickBoost;
+    if (b.manualOverride) bonusMul += o.manualOverrideBonus;
+    const score = ((b.strength ?? 0) + 0.1) * bonusMul / (1 + o.distancePenalty * delta);
+    if (score > bestScore) {
+      bestScore = score;
+      bestIdx = i;
+    }
+  }
+
+  const chosen = beats[bestIdx];
+  const reasonTags: string[] = [];
+  if (chosen.downbeat) reasonTags.push("downbeat");
+  if (chosen.barPos === 1) reasonTags.push("bar 1");
+  if (chosen.phrasePos === 0) reasonTags.push("phrase start");
+  if (chosen.kind && chosen.kind !== "other") reasonTags.push(chosen.kind);
+  if (chosen.manualOverride) reasonTags.push("manual override");
+
+  return {
+    idx: bestIdx,
+    deltaFrames: chosen.frame - targetFrame,
+    score: bestScore,
+    reasonTags,
+  };
 }
 
 function lineCol(source: string, offset: number): { line: number; column: number } {
@@ -97,8 +199,9 @@ export function findInterpolate(source: string, beats: BeatsFile): Animation[] {
     // Frame 0 is "video start" — never retarget it. Only the end frame is
     // a candidate for beat alignment.
     if (endFrame === 0) continue;
-    const targetIdx = nearestBeatIndex(endFrame, beats.beats);
-    if (targetIdx < 0) continue;
+    const match = bestBeatForFrame(endFrame, beats.beats);
+    if (match.idx < 0) continue;
+    const targetIdx = match.idx;
     const targetBeat = beats.beats[targetIdx];
     if (targetBeat.frame === endFrame) continue;
     const deltaSec = Math.abs(targetBeat.frame - endFrame) / beats.fps;
@@ -106,9 +209,10 @@ export function findInterpolate(source: string, beats: BeatsFile): Animation[] {
     const { line, column } = lineCol(source, m.index);
     const original = m[0];
     const proposed = `interpolate(frame, [${startFrame}, beats[${targetIdx}].frame]${tail})`;
+    const tagSuffix = match.reasonTags.length ? ` [${match.reasonTags.join(", ")}]` : "";
     const rationale = weakMatch
-      ? `WEAK MATCH (${deltaSec.toFixed(2)}s off): end frame ${endFrame} → beat ${targetIdx} at frame ${targetBeat.frame} (${targetBeat.time.toFixed(3)}s). Consider keeping as-is or running override to add a beat near ${(endFrame / beats.fps).toFixed(2)}s.`
-      : `Aligns end frame ${endFrame} to beat ${targetIdx} (frame ${targetBeat.frame}, ${targetBeat.time.toFixed(3)}s, ${deltaSec.toFixed(3)}s delta).`;
+      ? `WEAK MATCH (${deltaSec.toFixed(2)}s off): end frame ${endFrame} → beat ${targetIdx} at frame ${targetBeat.frame} (${targetBeat.time.toFixed(3)}s)${tagSuffix}. Consider keeping as-is or running override to add a beat near ${(endFrame / beats.fps).toFixed(2)}s.`
+      : `Aligns end frame ${endFrame} to beat ${targetIdx} (frame ${targetBeat.frame}, ${targetBeat.time.toFixed(3)}s, ${deltaSec.toFixed(3)}s delta)${tagSuffix}.`;
     out.push({
       id: `interp-${idx++}`,
       kind: "interpolate",
@@ -138,8 +242,9 @@ export function findSpring(source: string, beats: BeatsFile): Animation[] {
     const delay = Number(m[1]);
     // delayInFrames: 0 means "no delay" — don't retarget it to a non-zero beat.
     if (delay === 0) continue;
-    const targetIdx = nearestBeatIndex(delay, beats.beats);
-    if (targetIdx < 0) continue;
+    const match = bestBeatForFrame(delay, beats.beats);
+    if (match.idx < 0) continue;
+    const targetIdx = match.idx;
     const targetBeat = beats.beats[targetIdx];
     if (targetBeat.frame === delay) continue;
     const deltaSec = Math.abs(targetBeat.frame - delay) / beats.fps;
@@ -150,9 +255,10 @@ export function findSpring(source: string, beats: BeatsFile): Animation[] {
       /delayInFrames\s*:\s*\d+(?:\.\d+)?/,
       `delayInFrames: beats[${targetIdx}].frame`
     );
+    const tagSuffix = match.reasonTags.length ? ` [${match.reasonTags.join(", ")}]` : "";
     const rationale = weakMatch
-      ? `WEAK MATCH (${deltaSec.toFixed(2)}s off): spring delay ${delay} → beat ${targetIdx} at frame ${targetBeat.frame}. Consider keeping as-is.`
-      : `Aligns spring delay frame ${delay} to beat ${targetIdx} (frame ${targetBeat.frame}, ${targetBeat.time.toFixed(3)}s, ${deltaSec.toFixed(3)}s delta).`;
+      ? `WEAK MATCH (${deltaSec.toFixed(2)}s off): spring delay ${delay} → beat ${targetIdx} at frame ${targetBeat.frame}${tagSuffix}. Consider keeping as-is.`
+      : `Aligns spring delay frame ${delay} to beat ${targetIdx} (frame ${targetBeat.frame}, ${targetBeat.time.toFixed(3)}s, ${deltaSec.toFixed(3)}s delta)${tagSuffix}.`;
     out.push({
       id: `spring-${idx++}`,
       kind: "spring",
@@ -180,10 +286,11 @@ export function findSequence(source: string, beats: BeatsFile): Animation[] {
     const from = Number(m[2]);
     // <Sequence from={0}> means "start of video" — never retarget it.
     if (from === 0) continue;
-    // Prefer aligning to a drop if one is near; otherwise nearest beat.
+    // Prefer aligning to a drop if one is near; otherwise musically-scored beat.
     let proposedExpr = "";
     let rationaleBody = "";
     let targetFrame = 0;
+    let tagSuffix = "";
     const nearestDrop = beats.drops.reduce<{ idx: number; dist: number } | null>(
       (acc, d, i) => {
         const dist = Math.abs(d.frame - from);
@@ -198,13 +305,15 @@ export function findSequence(source: string, beats: BeatsFile): Animation[] {
       targetFrame = drop.frame;
       rationaleBody = `Sequence start ${from} → ${drop.kind} at frame ${drop.frame} (${drop.time.toFixed(2)}s)`;
     } else {
-      const targetIdx = nearestBeatIndex(from, beats.beats);
-      if (targetIdx < 0) continue;
+      const match = bestBeatForFrame(from, beats.beats);
+      if (match.idx < 0) continue;
+      const targetIdx = match.idx;
       const beat = beats.beats[targetIdx];
       if (beat.frame === from) continue;
       proposedExpr = `beats[${targetIdx}].frame`;
       targetFrame = beat.frame;
       rationaleBody = `Sequence start ${from} → beat ${targetIdx} at frame ${beat.frame} (${beat.time.toFixed(3)}s)`;
+      if (match.reasonTags.length) tagSuffix = ` [${match.reasonTags.join(", ")}]`;
     }
     const deltaSec = Math.abs(targetFrame - from) / beats.fps;
     const weakMatch = deltaSec > WEAK_MATCH_THRESHOLD_SEC;
@@ -212,8 +321,8 @@ export function findSequence(source: string, beats: BeatsFile): Animation[] {
     const original = m[0];
     const proposed = original.replace(/from=\{\d+(?:\.\d+)?\}/, `from={${proposedExpr}}`);
     const rationale = weakMatch
-      ? `WEAK MATCH (${deltaSec.toFixed(2)}s off): ${rationaleBody}. Consider keeping as-is.`
-      : `Aligns ${rationaleBody}, ${deltaSec.toFixed(3)}s delta.`;
+      ? `WEAK MATCH (${deltaSec.toFixed(2)}s off): ${rationaleBody}${tagSuffix}. Consider keeping as-is.`
+      : `Aligns ${rationaleBody}, ${deltaSec.toFixed(3)}s delta${tagSuffix}.`;
     out.push({
       id: `seq-${idx++}`,
       kind: "Sequence",

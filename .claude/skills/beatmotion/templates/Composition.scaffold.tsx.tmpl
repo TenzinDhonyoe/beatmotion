@@ -7,7 +7,7 @@ import {
 } from "remotion";
 import beatsData from "__BEATS_IMPORT__";
 import { createBeatHelpers } from "./useBeats";
-import { beatFade, dropPunch, sectionSlide, pickTransition } from "./transitions";
+import { beatFade, dropClimax, sectionSlide, pickTransition } from "./transitions";
 __MEDIA_FILES_IMPORT__
 
 const helpers = createBeatHelpers(beatsData);
@@ -68,14 +68,20 @@ const SectionView: React.FC<{
   const activeBeat = activeBeatIdx >= 0 ? beatsInSection[activeBeatIdx] : null;
   const transition = activeBeat ? pickTransition(activeBeat.strength) : "cut";
 
-  // Find the next drop within this section (if any) for emphasis.
-  const nextDrop = dropsInSection.find((d) => d.frame >= frame - 4);
+  // Find the next drop within this section (if any) for emphasis. Pull a
+  // window of ±16 frames so the anticipation phase of dropClimax has data
+  // to work with (it reaches back 6 frames before the drop).
+  const nextDrop = dropsInSection.find((d) => d.frame >= frame - 16);
+  // dropClimax returns {} when inactive — won't clobber slide / fade.
   const dropStyle = nextDrop
-    ? dropPunch(frame, nextDrop.frame, 0.18, 8)
-    : { transform: "scale(1)" };
+    ? dropClimax(frame, nextDrop.frame, { scale: 0.4, freezeFrames: 4, desaturate: true })
+    : {};
 
-  // Per-section slide direction so adjacent sections don't feel identical.
-  const slideDirection = (["up", "left", "down", "right"] as const)[sectionIndex % 4];
+  // Per-section slide direction. Seeded by the section's start frame so
+  // adjacent sections feel different, but a track with many sections won't
+  // cycle predictably every fourth section (the old `sectionIndex % 4`).
+  const slideHash = (sectionStartFrame * 2654435761) >>> 0;
+  const slideDirection = (["up", "left", "down", "right"] as const)[slideHash % 4];
   const slideStyle = sectionSlide(frame, sectionStartFrame, fps, slideDirection, 80);
 
   // Beat-strength-aware reveal: stronger beats animate with a longer fade ramp.

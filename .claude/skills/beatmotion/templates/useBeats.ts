@@ -19,7 +19,19 @@
  *   const beats = useBeats(beatsData);
  */
 
-export type Beat = { time: number; frame: number; strength: number };
+export type Beat = {
+  time: number;
+  frame: number;
+  strength: number;
+  // Optional musical-structure fields populated by Phase 2+ analyzer.
+  // Absent on legacy sidecars — helpers degrade gracefully.
+  kind?: "kick" | "snare" | "hat" | "other";
+  barPos?: 1 | 2 | 3 | 4;
+  phrasePos?: number;
+  downbeat?: boolean;
+  synthetic?: boolean;
+  manualOverride?: boolean;
+};
 export type Drop = { time: number; frame: number; kind: string };
 export type Section = { start: number; end: number; kind: string };
 
@@ -32,6 +44,24 @@ export type BeatsData = {
   drops: Drop[];
   sections: Section[];
   overrides?: unknown[];
+  // Phase 3 additions (optional).
+  gridLocked?: boolean;
+  phrases?: Array<{ startBeat: number; endBeat: number; startFrame: number; endFrame: number }>;
+};
+
+export type BestBeatOpts = {
+  downbeatBonus?: number;
+  barOneBonus?: number;
+  phraseBonus?: number;
+  kickBoost?: number;
+  manualOverrideBonus?: number;
+  distancePenalty?: number;
+};
+
+export type BestBeatResult = {
+  idx: number;
+  deltaFrames: number;
+  score: number;
 };
 
 export type BeatHelpers = {
@@ -48,8 +78,16 @@ export type BeatHelpers = {
   /** Time (s) of the Nth detected beat. */
   timeOf: (beatIndex: number) => number;
 
-  /** Index of the beat nearest the given frame. */
+  /** Index of the beat nearest the given frame (pure frame distance). */
   nearestBeat: (frame: number) => number;
+
+  /**
+   * Index of the musically best-fit beat for the given frame. Weights by
+   * strength, downbeat / bar-position / phrase-start / kick bonuses, and a
+   * distance penalty. Defaults to a strength-weighted nearest picker when
+   * the sidecar lacks structure fields.
+   */
+  bestBeat: (frame: number, opts?: BestBeatOpts) => BestBeatResult;
 
   /** Frame of the next beat at or after the given frame, or Infinity if none. */
   nextBeatFrame: (frame: number) => number;
@@ -102,6 +140,38 @@ export function createBeatHelpers(data: BeatsData): BeatHelpers {
     return bestIdx;
   };
 
+  // Musically-aware picker — same scoring rule as bin/sync.ts:bestBeatForFrame.
+  // Bonuses default to 0 when their corresponding field is absent on a beat,
+  // so on legacy sidecars this degrades cleanly to strength-weighted nearest.
+  const bestBeat = (frame: number, opts: BestBeatOpts = {}): BestBeatResult => {
+    if (beats.length === 0) return { idx: -1, deltaFrames: 0, score: 0 };
+    const downbeatBonus = opts.downbeatBonus ?? 1.5;
+    const barOneBonus = opts.barOneBonus ?? 0.5;
+    const phraseBonus = opts.phraseBonus ?? 0.8;
+    const kickBoost = opts.kickBoost ?? 0.3;
+    const manualOverrideBonus = opts.manualOverrideBonus ?? 2.0;
+    const distancePenalty = opts.distancePenalty ?? 0.1;
+
+    let bestIdx = 0;
+    let bestScore = -Infinity;
+    for (let i = 0; i < beats.length; i++) {
+      const b = beats[i];
+      const delta = Math.abs(b.frame - frame);
+      let bonus = 1;
+      if (b.downbeat) bonus += downbeatBonus;
+      if (b.barPos === 1) bonus += barOneBonus;
+      if (b.phrasePos === 0) bonus += phraseBonus;
+      if (b.kind === "kick") bonus += kickBoost;
+      if (b.manualOverride) bonus += manualOverrideBonus;
+      const score = ((b.strength ?? 0) + 0.1) * bonus / (1 + distancePenalty * delta);
+      if (score > bestScore) {
+        bestScore = score;
+        bestIdx = i;
+      }
+    }
+    return { idx: bestIdx, deltaFrames: beats[bestIdx].frame - frame, score: bestScore };
+  };
+
   const nextBeatFrame = (frame: number): number => {
     for (const b of beats) if (b.frame >= frame) return b.frame;
     return Infinity;
@@ -143,6 +213,7 @@ export function createBeatHelpers(data: BeatsData): BeatHelpers {
     frameOf,
     timeOf,
     nearestBeat,
+    bestBeat,
     nextBeatFrame,
     prevBeatFrame,
     isOnBeat,

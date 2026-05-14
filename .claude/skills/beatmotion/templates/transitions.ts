@@ -39,6 +39,10 @@ export function beatFade(frame: number, beatFrame: number, fadeFrames = 10): Sty
 /**
  * Scale-bounce centered on a drop. `intensity` is the peak extra scale (0.15 = +15%).
  * `windowFrames` is the half-width of the bounce in frames.
+ *
+ * Kept for back-compat with hand-edited compositions. New scaffolds use
+ * `dropClimax` instead, which is more visceral and composes correctly with
+ * sibling transforms (returns {} when inactive rather than scale(1)).
  */
 export function dropPunch(
   frame: number,
@@ -51,6 +55,78 @@ export function dropPunch(
   const t = 1 - distance / windowFrames;
   const scale = 1 + t * intensity;
   return { transform: `scale(${scale})` };
+}
+
+/**
+ * Visceral drop emphasis composed of three temporal phases:
+ *
+ *   anticipation — `anticipationFrames` before the drop frame: subtle inverse
+ *                  zoom-out + brightening, like the music ducking before the
+ *                  hit. Mirrors what professional editors call a "tension cut."
+ *   hit          — drop frame through `freezeFrames`: scale jumps to
+ *                  `1 + scale`, optionally desaturated, brightness +30%. The
+ *                  freeze gives the viewer's eye a beat to register the impact.
+ *   release      — next `releaseFrames` frames: linear ramp back to scale 1
+ *                  and full saturation.
+ *
+ * Returns `{}` outside any active phase so the element's other styles
+ * (translate from sectionSlide, etc.) pass through cleanly. The previous
+ * `dropPunch` returned `scale(1)` even when inactive, silently nuking any
+ * other transform spread onto the same element.
+ *
+ * Default scale 0.4 (+40%) is intentionally large — the original 0.18 was
+ * imperceptible against simultaneous fade/slide. If your hero element is
+ * close to viewport edges, wrap it in an `overflow: visible` parent.
+ */
+export function dropClimax(
+  frame: number,
+  dropFrame: number,
+  opts: {
+    scale?: number;
+    freezeFrames?: number;
+    releaseFrames?: number;
+    anticipationFrames?: number;
+    desaturate?: boolean;
+  } = {}
+): Style {
+  const scale = opts.scale ?? 0.4;
+  const freezeFrames = opts.freezeFrames ?? 4;
+  const releaseFrames = opts.releaseFrames ?? 12;
+  const anticipationFrames = opts.anticipationFrames ?? 6;
+  const desaturate = opts.desaturate ?? true;
+
+  const d = frame - dropFrame; // signed
+
+  // Anticipation: subtle inverse zoom + brighten in the run-up.
+  if (d >= -anticipationFrames && d < 0) {
+    const t = (d + anticipationFrames) / anticipationFrames; // 0 → 1 approaching drop
+    return {
+      transform: `scale(${(1 - 0.04 * t).toFixed(4)})`,
+      filter: `brightness(${(1 + 0.1 * t).toFixed(3)})`,
+    };
+  }
+  // Hit: scale punch + freeze + saturation pulse.
+  if (d >= 0 && d < freezeFrames) {
+    return {
+      transform: `scale(${(1 + scale).toFixed(4)})`,
+      filter: desaturate ? "saturate(0.2) brightness(1.3)" : "brightness(1.3)",
+    };
+  }
+  // Release: linear ramp back to scale 1 and saturate 1.
+  if (d >= freezeFrames && d < freezeFrames + releaseFrames) {
+    const t = (d - freezeFrames) / releaseFrames; // 0 → 1
+    const s = 1 + scale * (1 - t);
+    const sat = 0.2 + 0.8 * t;
+    const brt = 1.3 - 0.3 * t;
+    return {
+      transform: `scale(${s.toFixed(4)})`,
+      filter: desaturate
+        ? `saturate(${sat.toFixed(3)}) brightness(${brt.toFixed(3)})`
+        : `brightness(${brt.toFixed(3)})`,
+    };
+  }
+  // Inactive: no contribution. Element keeps whatever transform/filter it had.
+  return {};
 }
 
 /**

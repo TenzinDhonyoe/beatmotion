@@ -173,54 +173,60 @@ async function main() {
       jsIdent(`media_${i}_${basename(abs, extname(abs))}`, `media_${i}`)
     );
     mediaFilesImport = lines.join("\n") + `\nconst mediaFiles = [${idents.join(", ")}];`;
+    // Nested AbsoluteFills: outer = slide (translate), inner = drop
+    // (scale + filter). Keeps transforms from colliding under spread.
     mediaRenderBlock = `return (
-    <AbsoluteFill
-      style={{
-        alignItems: "center",
-        justifyContent: "center",
-        ...slideStyle,
-        ...dropStyle,
-      }}
-    >
-      <div style={{ ...fadeStyle }}>
-        <Img
-          src={mediaFiles[Math.max(0, activeBeatIdx) % mediaFiles.length]}
-          style={{ maxWidth: "85%", maxHeight: "85%", objectFit: "contain" }}
-        />
-      </div>
+    <AbsoluteFill style={{ ...slideStyle }}>
+      <AbsoluteFill
+        style={{
+          alignItems: "center",
+          justifyContent: "center",
+          overflow: "visible",
+          ...dropStyle,
+        }}
+      >
+        <div style={{ ...fadeStyle, overflow: "visible" }}>
+          <Img
+            src={mediaFiles[Math.max(0, activeBeatIdx) % mediaFiles.length]}
+            style={{ maxWidth: "85%", maxHeight: "85%", objectFit: "contain" }}
+          />
+        </div>
+      </AbsoluteFill>
     </AbsoluteFill>
   );`;
   } else {
     mediaImportExtra = "";
     mediaFilesImport = "";
     mediaRenderBlock = `return (
-    <AbsoluteFill
-      style={{
-        alignItems: "center",
-        justifyContent: "center",
-        ...slideStyle,
-        ...dropStyle,
-      }}
-    >
-      <div
+    <AbsoluteFill style={{ ...slideStyle }}>
+      <AbsoluteFill
         style={{
-          fontSize: 96,
-          fontWeight: 700,
-          letterSpacing: -3,
-          ...fadeStyle,
+          alignItems: "center",
+          justifyContent: "center",
+          overflow: "visible",
+          ...dropStyle,
         }}
       >
-        {section.kind.toUpperCase()}
-      </div>
-      <div
-        style={{
-          marginTop: 24,
-          fontSize: 28,
-          opacity: 0.6,
-        }}
-      >
-        beat {Math.max(0, activeBeatIdx) + 1} / {beatsInSection.length}
-      </div>
+        <div
+          style={{
+            fontSize: 96,
+            fontWeight: 700,
+            letterSpacing: -3,
+            ...fadeStyle,
+          }}
+        >
+          {section.kind.toUpperCase()}
+        </div>
+        <div
+          style={{
+            marginTop: 24,
+            fontSize: 28,
+            opacity: 0.6,
+          }}
+        >
+          beat {Math.max(0, activeBeatIdx) + 1} / {beatsInSection.length}
+        </div>
+      </AbsoluteFill>
     </AbsoluteFill>
   );`;
   }
