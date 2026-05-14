@@ -15,9 +15,37 @@
  * Lag-to-BPM: bpm = 60 * odfRate / lag.
  */
 
+import { bandpass } from "./filters.ts";
+
 export const DEFAULT_ODF_RATE = 200; // Hz — 5 ms hop, good for typical pop/EDM onsets.
 export const DEFAULT_MIN_BPM = 60;
 export const DEFAULT_MAX_BPM = 200;
+
+// Drum-kit-tuned frequency bands. The weights say "if this band carries
+// most of the onset energy, the percussion kind is probably X." A kick
+// drum lives in 20–250 Hz, snare body in 200–800 with brightness up to
+// 4 kHz, hat / cymbal / shaker in the air band above 5 kHz. A clap is
+// close enough to a snare in spectrum that it gets the same weights.
+//
+// The sub_kick band is cascaded (4-pole) because a 2-pole biquad at 60 Hz
+// has too gentle a rolloff to keep bass-guitar fundamentals out of the
+// kick band; the 4-pole gives ~24 dB/oct which makes the band actually
+// kick-selective on busy mixes.
+export type BandSpec = {
+  name: string;
+  lo: number;
+  hi: number;
+  poles?: number;
+  weights: { kick: number; snare: number; hat: number };
+};
+
+export const DEFAULT_BANDS: BandSpec[] = [
+  { name: "sub_kick",   lo: 20,   hi: 120,   poles: 4, weights: { kick: 1.0, snare: 0.0, hat: 0.0 } },
+  { name: "low_body",   lo: 120,  hi: 250,             weights: { kick: 0.5, snare: 0.3, hat: 0.0 } },
+  { name: "snare_body", lo: 200,  hi: 800,             weights: { kick: 0.1, snare: 1.0, hat: 0.1 } },
+  { name: "snare_brt",  lo: 1500, hi: 4000,            weights: { kick: 0.0, snare: 0.8, hat: 0.4 } },
+  { name: "hat_air",    lo: 5000, hi: 12000,           weights: { kick: 0.0, snare: 0.2, hat: 1.0 } },
+];
 
 export function mixToMono(channels: Float32Array[]): Float32Array {
   if (channels.length === 1) return channels[0];
@@ -236,4 +264,161 @@ export function tempogram(
     }
   }
   return out;
+}
+
+/**
+ * Compute a band-filtered version of the input audio for every band in `bands`,
+ * plus a per-band onset detection function. Used by `classifyBeat` to tell
+ * kick / snare / hat apart and by `backtrackToAttack` to align beats to the
+ * perceptual transient on the relevant band.
+ *
+ * Memory cost: bands.length × samples.length × 4 bytes (Float32). For a 4-min
+ * song at 48 kHz × 5 bands that's about 230 MB of intermediates — fine on a
+ * developer laptop, would be uncomfortable on memory-constrained CI. Callers
+ * with tight budgets can pass a subset of bands.
+ */
+export type BandedAudio = {
+  bands: BandSpec[];
+  filtered: Float32Array[];
+  bandedOdf: Float32Array[];
+};
+
+export function computeBandedAudio(
+  mono: Float32Array,
+  sampleRate: number,
+  bands: BandSpec[] = DEFAULT_BANDS,
+  odfRate: number = DEFAULT_ODF_RATE
+): BandedAudio {
+  const filtered: Float32Array[] = [];
+  const bandedOdf: Float32Array[] = [];
+  for (const band of bands) {
+    const f = bandpass(mono, sampleRate, band.lo, band.hi, band.poles ?? 2);
+    filtered.push(f);
+    bandedOdf.push(computeODF(f, sampleRate, odfRate));
+  }
+  return { bands, filtered, bandedOdf };
+}
+
+export type BeatKind = "kick" | "snare" | "hat" | "other";
+
+export type BeatClassification = {
+  kind: BeatKind;
+  bandEnergies: number[]; // L1-normalized over the band set
+  scores: { kick: number; snare: number; hat: number };
+};
+
+/**
+ * Classify a single detected onset by which spectral band dominates within
+ * a ±5 ms window around the peak. Returns a kind plus the full L1-normalized
+ * band-energy vector so downstream code can do something fancier than
+ * one-of-four bucketing if it wants to.
+ *
+ * The 0.5 score threshold for committing to a non-"other" kind matters:
+ * tight enough that a kick+snare simultaneous hit lands as the louder one
+ * (instead of being declared "other"), loose enough that a muddy mid-band
+ * pulse stays in "other" rather than getting force-labeled.
+ */
+export function classifyBeat(
+  peakOdfFrame: number,
+  bandedOdf: Float32Array[],
+  bands: BandSpec[] = DEFAULT_BANDS,
+  odfRate: number = DEFAULT_ODF_RATE,
+  windowMs: number = 5
+): BeatClassification {
+  const windowFrames = Math.max(1, Math.round((windowMs / 1000) * odfRate));
+  const contribs: number[] = new Array(bands.length).fill(0);
+  for (let b = 0; b < bands.length; b++) {
+    const odf = bandedOdf[b];
+    const start = Math.max(0, peakOdfFrame - windowFrames);
+    const end = Math.min(odf.length, peakOdfFrame + windowFrames + 1);
+    let peak = 0;
+    for (let i = start; i < end; i++) {
+      if (odf[i] > peak) peak = odf[i];
+    }
+    contribs[b] = peak;
+  }
+
+  const total = contribs.reduce((a, b) => a + b, 0);
+  if (total < 1e-9) {
+    return {
+      kind: "other",
+      bandEnergies: bands.map(() => 0),
+      scores: { kick: 0, snare: 0, hat: 0 },
+    };
+  }
+  const bandEnergies = contribs.map((c) => c / total);
+
+  let kick = 0;
+  let snare = 0;
+  let hat = 0;
+  for (let b = 0; b < bands.length; b++) {
+    kick += bandEnergies[b] * bands[b].weights.kick;
+    snare += bandEnergies[b] * bands[b].weights.snare;
+    hat += bandEnergies[b] * bands[b].weights.hat;
+  }
+
+  let kind: BeatKind = "other";
+  const max = Math.max(kick, snare, hat);
+  if (max > 0.5) {
+    if (max === kick) kind = "kick";
+    else if (max === snare) kind = "snare";
+    else kind = "hat";
+  }
+  return { kind, bandEnergies, scores: { kick, snare, hat } };
+}
+
+/**
+ * Walk back from a detected peak on a band-filtered audio stream to find the
+ * actual perceptual attack. The log-energy ODF peaks where the energy slope
+ * is steepest — that's some way INTO the attack, not its start, because RMS
+ * smooths out the instantaneous onset. Real perceptual onsets are at the
+ * earliest point where the band's energy crosses up through some fraction
+ * of the peak RMS — for percussion, 30% of peak captures the leading edge
+ * cleanly without picking up earlier room noise.
+ *
+ * For synthetic click-track fixtures, the click IS the energy — RMS goes
+ * from 0 to peak in a single frame, so backtrack returns the original peak
+ * sample unchanged. The shift kicks in on real music where attacks have
+ * finite rise time (5-30 ms).
+ *
+ * Returns the sample index of the attack. Constrain searchStart with
+ * `prevPeakSample + minGapSamples` from the caller side to avoid backtracking
+ * into a previous event's decay tail.
+ */
+export function backtrackToAttack(
+  filteredBand: Float32Array,
+  sampleRate: number,
+  peakSample: number,
+  opts: {
+    maxBackMs?: number;
+    rmsWindowMs?: number;
+    thresholdRatio?: number;
+    searchFloor?: number;
+  } = {}
+): number {
+  const { maxBackMs = 30, rmsWindowMs = 2, thresholdRatio = 0.3, searchFloor = 0 } = opts;
+  const maxBackSamples = Math.max(1, Math.round((maxBackMs / 1000) * sampleRate));
+  const rmsHalf = Math.max(1, Math.round((rmsWindowMs / 1000) * sampleRate * 0.5));
+
+  function rmsAt(idx: number): number {
+    const a = Math.max(0, idx - rmsHalf);
+    const b = Math.min(filteredBand.length, idx + rmsHalf + 1);
+    let sum = 0;
+    for (let i = a; i < b; i++) sum += filteredBand[i] * filteredBand[i];
+    const n = Math.max(1, b - a);
+    return Math.sqrt(sum / n);
+  }
+
+  const peakRms = rmsAt(peakSample);
+  if (peakRms < 1e-9) return peakSample;
+  const threshold = peakRms * thresholdRatio;
+  const searchStart = Math.max(searchFloor, peakSample - maxBackSamples);
+
+  for (let i = peakSample; i >= searchStart; i--) {
+    if (rmsAt(i) < threshold) {
+      // First sample WHERE energy crosses up through threshold = i+1.
+      return Math.min(filteredBand.length - 1, i + 1);
+    }
+  }
+  return peakSample;
 }

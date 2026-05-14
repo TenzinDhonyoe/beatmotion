@@ -159,6 +159,10 @@ export function sectionSlide(
  * Strength-aware transition picker. Given a beat's strength (0..1), return a
  * transition kind to apply. Used by the scaffold so strong beats get punchier
  * transitions than weak ones.
+ *
+ * Legacy API kept exported for back-compat with comps scaffolded before
+ * Phase 2. New scaffolds prefer `pickTransitionPlan` which knows about
+ * drum kind, downbeats, and phrase boundaries.
  */
 export type TransitionKind = "cut" | "fade" | "slide";
 
@@ -166,4 +170,150 @@ export function pickTransition(strength: number): TransitionKind {
   if (strength >= 0.75) return "slide";
   if (strength >= 0.4) return "fade";
   return "cut";
+}
+
+// ───────────────────────────────────────────────────────────────────────
+// Kind-idiomatic helpers — match the visual gesture to what the listener
+// is hearing. Kicks land with a tight scale snap on the hero element,
+// snares trigger a brief brightness flash (sounds + looks like a hit on a
+// hi-energy frame), hi-hats nudge a small element by one pixel for the
+// "tick tick" subdivision feel. Each returns {} outside its active window
+// so they compose under spread without clobbering each other.
+// ───────────────────────────────────────────────────────────────────────
+
+/**
+ * Sharp scale snap on a kick. Window is short (a few frames) and the scale
+ * lerps linearly from `1 + intensity` at the beat frame back to 1 at the
+ * window edge. Compose into a hero element that's wrapped in a parent
+ * scale (e.g. dropClimax) without conflict — CSS transforms cascade
+ * multiplicatively.
+ */
+export function kickPunch(
+  frame: number,
+  beatFrame: number,
+  intensity: number = 0.05,
+  windowFrames: number = 4
+): Style {
+  const d = frame - beatFrame;
+  if (d < 0 || d > windowFrames) return {};
+  const t = 1 - d / windowFrames;
+  return { transform: `scale(${(1 + intensity * t).toFixed(4)})` };
+}
+
+/**
+ * Brief brightness pulse on a snare. Decays linearly back to 1.0 over
+ * `flashFrames`. Composes with other filter styles in CSS (each element's
+ * filter applies independently — chained brightness multiplies).
+ */
+export function snareFlash(
+  frame: number,
+  beatFrame: number,
+  flashFrames: number = 3,
+  peak: number = 0.5
+): Style {
+  const d = frame - beatFrame;
+  if (d < 0 || d > flashFrames) return {};
+  const t = 1 - d / flashFrames;
+  return { filter: `brightness(${(1 + peak * t).toFixed(3)})` };
+}
+
+/**
+ * 1-pixel translation on a hi-hat. Settles back to 0 over `settleFrames`.
+ * Pixels intentionally small — hats happen on every 8th note, and anything
+ * more visible would look like a seizure. Route this to a small ornament
+ * element (a corner badge, a tiny dot) so the eye reads "subdivisions are
+ * happening" without the hero element constantly twitching.
+ */
+export function hatNudge(
+  frame: number,
+  beatFrame: number,
+  pixels: number = 1,
+  settleFrames: number = 2
+): Style {
+  const d = frame - beatFrame;
+  if (d < 0 || d > settleFrames) return {};
+  const t = 1 - d / settleFrames;
+  return { transform: `translateX(${(pixels * t).toFixed(2)}px)` };
+}
+
+/**
+ * Phrase-boundary slide-in. Bigger move than sectionSlide, longer settle.
+ * Direction is derived from a numeric seed so adjacent phrases don't always
+ * slide the same way — pass `phraseStartFrame` as the seed for that effect.
+ */
+export function phraseSlideIn(
+  frame: number,
+  phraseStartFrame: number,
+  fps: number,
+  seed: number = phraseStartFrame,
+  distancePx: number = 120,
+  durationFrames: number = 18
+): Style {
+  const local = frame - phraseStartFrame;
+  if (local < 0) return {};
+  if (local > durationFrames) return {};
+  const dirs = ["up", "down", "left", "right"] as const;
+  const dir = dirs[((seed * 2654435761) >>> 0) % 4];
+  const t = local / durationFrames; // 0 → 1
+  const ease = 1 - Math.pow(1 - t, 3); // ease-out cubic
+  const offset = distancePx * (1 - ease);
+  switch (dir) {
+    case "up":
+      return { transform: `translateY(${offset.toFixed(2)}px)` };
+    case "down":
+      return { transform: `translateY(${(-offset).toFixed(2)}px)` };
+    case "left":
+      return { transform: `translateX(${offset.toFixed(2)}px)` };
+    case "right":
+      return { transform: `translateX(${(-offset).toFixed(2)}px)` };
+  }
+}
+
+/**
+ * Richer Beat shape used by `pickTransitionPlan`. All structural fields are
+ * optional so legacy sidecars degrade gracefully — without `kind`/`downbeat`
+ * the picker falls back to a strength-based fade.
+ */
+export type Beat = {
+  time: number;
+  frame: number;
+  strength: number;
+  kind?: "kick" | "snare" | "hat" | "other";
+  barPos?: 1 | 2 | 3 | 4;
+  phrasePos?: number;
+  downbeat?: boolean;
+};
+
+export type TransitionPlan = {
+  primary: "cut" | "fade" | "punch" | "flash" | "nudge" | "climax" | "slide";
+  intensity?: number;
+  fadeFrames?: number;
+  pixels?: number;
+};
+
+/**
+ * Pick a transition plan from a beat + context flags. Decision order:
+ *
+ *   1. isDrop → climax (the moment carries the most weight)
+ *   2. isPhraseStart → slide (16/32-beat punctuation)
+ *   3. downbeat → punch (musically the most important beat of the bar)
+ *   4. by drum kind: kick → punch, snare → flash, hat → nudge
+ *   5. unknown → strength-weighted fade (legacy behaviour)
+ */
+export function pickTransitionPlan(
+  beat: Beat | null,
+  opts: { isDrop?: boolean; isPhraseStart?: boolean } = {}
+): TransitionPlan {
+  if (opts.isDrop) return { primary: "climax", intensity: 0.4 };
+  if (opts.isPhraseStart) return { primary: "slide", fadeFrames: 14 };
+  if (!beat) return { primary: "cut" };
+  if (beat.downbeat) return { primary: "punch", intensity: 0.08 };
+  switch (beat.kind) {
+    case "kick":  return { primary: "punch", intensity: 0.05 };
+    case "snare": return { primary: "flash", fadeFrames: 3 };
+    case "hat":   return { primary: "nudge", pixels: 1 };
+    case "other":
+    case undefined:
+    default:      return { primary: "fade", fadeFrames: Math.max(2, Math.round(8 * (beat.strength ?? 0))) };
+  }
 }

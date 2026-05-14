@@ -7,7 +7,16 @@ import {
 } from "remotion";
 import beatsData from "__BEATS_IMPORT__";
 import { createBeatHelpers } from "./useBeats";
-import { beatFade, dropClimax, sectionSlide, pickTransition } from "./transitions";
+import {
+  beatFade,
+  dropClimax,
+  hatNudge,
+  kickPunch,
+  pickTransition,
+  pickTransitionPlan,
+  sectionSlide,
+  snareFlash,
+} from "./transitions";
 __MEDIA_FILES_IMPORT__
 
 const helpers = createBeatHelpers(beatsData);
@@ -67,6 +76,39 @@ const SectionView: React.FC<{
   })();
   const activeBeat = activeBeatIdx >= 0 ? beatsInSection[activeBeatIdx] : null;
   const transition = activeBeat ? pickTransition(activeBeat.strength) : "cut";
+
+  // Find the most recent beat of each drum kind. Routing different drums to
+  // different visual subjects keeps the hero element from twitching on every
+  // hi-hat tap, and lets each percussion role land on its own visual gesture.
+  const findLastOfKind = (kind: string) => {
+    for (let i = beatsInSection.length - 1; i >= 0; i--) {
+      const b = beatsInSection[i];
+      if (b.frame > frame) continue;
+      if (b.kind === kind) return b;
+    }
+    return null;
+  };
+  const lastKick = findLastOfKind("kick");
+  const lastSnare = findLastOfKind("snare");
+  const lastHat = findLastOfKind("hat");
+
+  // Pick a transition PLAN for the hero element based on the active beat's
+  // musical role. `pickTransition` (legacy) is kept above for back-compat
+  // with older Composition.tsx files; new code uses `pickTransitionPlan`.
+  const plan = pickTransitionPlan(activeBeat, {});
+
+  // Kick → hero scale punch (composes with dropClimax's scale via CSS cascade).
+  const kickStyle = lastKick && plan.primary === "punch"
+    ? kickPunch(frame, lastKick.frame, plan.intensity ?? 0.05, 4)
+    : {};
+
+  // Snare → hero brightness flash (composes with dropClimax's filter).
+  const snareStyle = lastSnare && plan.primary === "flash"
+    ? snareFlash(frame, lastSnare.frame, plan.fadeFrames ?? 3, 0.5)
+    : {};
+
+  // Hat → corner-ornament nudge (kept tiny so 8th notes don't shake the hero).
+  const hatStyle = lastHat ? hatNudge(frame, lastHat.frame, 1, 2) : {};
 
   // Find the next drop within this section (if any) for emphasis. Pull a
   // window of ±16 frames so the anticipation phase of dropClimax has data

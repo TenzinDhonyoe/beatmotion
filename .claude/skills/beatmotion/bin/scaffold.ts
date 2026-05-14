@@ -173,8 +173,11 @@ async function main() {
       jsIdent(`media_${i}_${basename(abs, extname(abs))}`, `media_${i}`)
     );
     mediaFilesImport = lines.join("\n") + `\nconst mediaFiles = [${idents.join(", ")}];`;
-    // Nested AbsoluteFills: outer = slide (translate), inner = drop
-    // (scale + filter). Keeps transforms from colliding under spread.
+    // Nested AbsoluteFills isolate each transform/filter source so they
+    // don't collide under spread: slide (translate) on the outer, dropClimax
+    // (scale + filter) on the inner. Kick punch + snare flash compose onto
+    // the hero element; hi-hat nudges go to a small corner ornament so
+    // 8th-note hats don't shake the main image.
     mediaRenderBlock = `return (
     <AbsoluteFill style={{ ...slideStyle }}>
       <AbsoluteFill
@@ -185,12 +188,31 @@ async function main() {
           ...dropStyle,
         }}
       >
-        <div style={{ ...fadeStyle, overflow: "visible" }}>
+        <div
+          style={{
+            ...fadeStyle,
+            ...kickStyle,
+            ...snareStyle,
+            overflow: "visible",
+          }}
+        >
           <Img
             src={mediaFiles[Math.max(0, activeBeatIdx) % mediaFiles.length]}
             style={{ maxWidth: "85%", maxHeight: "85%", objectFit: "contain" }}
           />
         </div>
+        <div
+          style={{
+            position: "absolute",
+            bottom: 24,
+            right: 24,
+            width: 10,
+            height: 10,
+            borderRadius: "50%",
+            background: "rgba(255,255,255,0.4)",
+            ...hatStyle,
+          }}
+        />
       </AbsoluteFill>
     </AbsoluteFill>
   );`;
@@ -213,6 +235,8 @@ async function main() {
             fontWeight: 700,
             letterSpacing: -3,
             ...fadeStyle,
+            ...kickStyle,
+            ...snareStyle,
           }}
         >
           {section.kind.toUpperCase()}
@@ -222,6 +246,7 @@ async function main() {
             marginTop: 24,
             fontSize: 28,
             opacity: 0.6,
+            ...hatStyle,
           }}
         >
           beat {Math.max(0, activeBeatIdx) + 1} / {beatsInSection.length}

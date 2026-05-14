@@ -15,11 +15,16 @@ import { basename, dirname, join, resolve } from "node:path";
 import decode from "audio-decode";
 import {
   DEFAULT_ODF_RATE,
+  DEFAULT_BANDS,
+  backtrackToAttack,
+  classifyBeat,
+  computeBandedAudio,
   computeODF,
   detectBpm,
   findPeaks,
   mixToMono,
   tempogram,
+  type BeatKind,
 } from "./dsp.ts";
 
 type Args = {
@@ -73,7 +78,14 @@ function parseArgs(argv: string[]): Args {
   return args;
 }
 
-type Beat = { time: number; frame: number; strength: number };
+type Beat = {
+  time: number;
+  frame: number;
+  strength: number;
+  kind?: BeatKind;
+  bandEnergies?: number[];
+  attackBacktrackMs?: number;
+};
 type Drop = { time: number; frame: number; kind: string };
 type Section = { start: number; end: number; kind: string };
 
@@ -247,23 +259,69 @@ async function main() {
   });
   console.error(`found ${peaks.length} onsets`);
 
+  // Multi-band drum classification + per-beat attack backtrack.
+  //
+  // Each detected peak is classified (kick / snare / hat / other) by which
+  // spectral band dominates within ±5 ms. The peak time is then shifted
+  // earlier to the true perceptual attack on the dominant band — for real
+  // music, energy rises 5–30 ms after the attack starts, so the ODF peak
+  // is systematically late. On synthetic clicks the energy is instantaneous
+  // and backtrack returns the same sample, so this is a no-op for the
+  // existing test fixtures.
+  console.error(`band-filtering (${DEFAULT_BANDS.length} bands)...`);
+  const banded = computeBandedAudio(mono, sampleRate, DEFAULT_BANDS, args.odfRate);
+  console.error("classifying beats + aligning attacks...");
+
   const maxStrength = peaks.reduce((m, p) => Math.max(m, p.strength), 0) || 1;
-  const beats: Beat[] = peaks.map((p) => ({
-    time: p.time,
-    frame: Math.round(p.time * args.fps),
-    strength: Math.round((p.strength / maxStrength) * 1000) / 1000,
-  }));
+  let prevAttackSample = -1;
+  const minGapSamples = Math.round(0.02 * sampleRate); // 20 ms guard
+  const beats: Beat[] = peaks.map((p) => {
+    const cls = classifyBeat(p.frame, banded.bandedOdf, DEFAULT_BANDS, args.odfRate);
+    // Dominant band by raw L1-normalized energy.
+    let domIdx = 0;
+    let domEnergy = -1;
+    for (let b = 0; b < cls.bandEnergies.length; b++) {
+      if (cls.bandEnergies[b] > domEnergy) {
+        domEnergy = cls.bandEnergies[b];
+        domIdx = b;
+      }
+    }
+    const peakSample = Math.round(p.time * sampleRate);
+    const attackFloor = prevAttackSample >= 0 ? prevAttackSample + minGapSamples : 0;
+    const attackSample = backtrackToAttack(banded.filtered[domIdx], sampleRate, peakSample, {
+      searchFloor: attackFloor,
+    });
+    prevAttackSample = attackSample;
+    const attackTime = attackSample / sampleRate;
+    const shiftMs = Math.round((p.time - attackTime) * 1000);
+    return {
+      time: Math.round(attackTime * 1000) / 1000,
+      frame: Math.round(attackTime * args.fps),
+      strength: Math.round((p.strength / maxStrength) * 1000) / 1000,
+      kind: cls.kind,
+      bandEnergies: cls.bandEnergies.map((e) => Math.round(e * 1000) / 1000),
+      ...(shiftMs > 0 ? { attackBacktrackMs: shiftMs } : {}),
+    };
+  });
 
   // The log-energy derivative ODF can't fire on the very first frame (there's
   // no prior frame to diff against). For tracks that start on a downbeat, this
   // means the analyzer reports its first beat one beat-interval late. Detect
   // that case and prepend an implicit beat at t=0 so `beats[0]` matches the
-  // music's beat 0 instead of beat 1.
+  // music's beat 0 instead of beat 1. Strength is borrowed from the first
+  // detected beat — wrong on real music (Phase 3's tempo-locked grid will
+  // replace this entire heuristic) but a known good-enough stand-in.
   if (globalBpm > 0 && beats.length > 0) {
     const beatInterval = 60 / globalBpm;
     const firstBeatTime = beats[0].time;
     if (firstBeatTime > beatInterval * 0.6 && firstBeatTime < beatInterval * 1.4) {
-      beats.unshift({ time: 0, frame: 0, strength: beats[0].strength });
+      beats.unshift({
+        time: 0,
+        frame: 0,
+        strength: beats[0].strength,
+        kind: beats[0].kind,
+        bandEnergies: beats[0].bandEnergies,
+      });
     }
   }
 
@@ -285,11 +343,12 @@ async function main() {
     sections,
     overrides: [] as Array<{ kind: string; time: number; note?: string; action?: string }>,
     analyzer: {
-      version: "0.2.0-native-dsp",
+      version: "0.4.0-banded",
       odfRate: args.odfRate,
       minBpm: args.minBpm,
       maxBpm: args.maxBpm,
       delta: args.delta,
+      bandFreqs: DEFAULT_BANDS.map((b) => [b.lo, b.hi]),
     },
     generatedAt: new Date().toISOString(),
   };
