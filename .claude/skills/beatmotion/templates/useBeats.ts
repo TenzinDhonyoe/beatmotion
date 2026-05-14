@@ -64,6 +64,13 @@ export type BestBeatResult = {
   score: number;
 };
 
+export type Phrase = {
+  startBeat: number;
+  endBeat: number;
+  startFrame: number;
+  endFrame: number;
+};
+
 export type BeatHelpers = {
   raw: BeatsData;
   bpm: number;
@@ -71,6 +78,10 @@ export type BeatHelpers = {
   beats: Beat[];
   drops: Drop[];
   sections: Section[];
+  /** Inferred phrase boundaries (every 16 or 32 beats). Empty unless grid-locked. */
+  phrases: Phrase[];
+  /** True when the analyzer locked beats to a tempo grid. */
+  gridLocked: boolean;
 
   /** Frame of the Nth detected beat, with bounds clamping. */
   frameOf: (beatIndex: number) => number;
@@ -112,6 +123,8 @@ export function createBeatHelpers(data: BeatsData): BeatHelpers {
   const beats = [...data.beats].sort((a, b) => a.frame - b.frame);
   const drops = [...data.drops].sort((a, b) => a.frame - b.frame);
   const sections = data.sections ?? [];
+  const phrases = data.phrases ?? [];
+  const gridLocked = data.gridLocked === true;
 
   const frameOf = (i: number): number => {
     if (beats.length === 0) return 0;
@@ -210,6 +223,8 @@ export function createBeatHelpers(data: BeatsData): BeatHelpers {
     beats,
     drops,
     sections,
+    phrases,
+    gridLocked,
     frameOf,
     timeOf,
     nearestBeat,

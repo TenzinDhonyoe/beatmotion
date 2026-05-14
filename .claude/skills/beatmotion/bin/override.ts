@@ -114,7 +114,9 @@ function applyCorrection(beats: BeatsFile, c: ParsedCorrection): string {
   }
 
   if (c.action === "add" && c.kind === "beat") {
-    beats.beats.push({ time: c.time, frame, strength: 1 });
+    // manualOverride trips the matcher's high-priority bonus so the user-
+    // added beat outranks any nearby grid beat the analyzer synthesized.
+    beats.beats.push({ time: c.time, frame, strength: 1, manualOverride: true });
     beats.beats.sort((a, b) => a.time - b.time);
     beats.overrides.push({
       kind: "beat",

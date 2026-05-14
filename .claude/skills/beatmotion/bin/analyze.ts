@@ -17,14 +17,18 @@ import {
   DEFAULT_ODF_RATE,
   DEFAULT_BANDS,
   backtrackToAttack,
+  buildTempoGrid,
   classifyBeat,
   computeBandedAudio,
   computeODF,
   detectBpm,
   findPeaks,
+  inferBarPhrase,
   mixToMono,
+  snapToGrid,
   tempogram,
   type BeatKind,
+  type GridSnappedPeak,
 } from "./dsp.ts";
 
 type Args = {
@@ -85,9 +89,18 @@ type Beat = {
   kind?: BeatKind;
   bandEnergies?: number[];
   attackBacktrackMs?: number;
+  barPos?: 1 | 2 | 3 | 4;
+  phrasePos?: number;
+  downbeat?: boolean;
+  synthetic?: boolean;
 };
 type Drop = { time: number; frame: number; kind: string };
 type Section = { start: number; end: number; kind: string };
+
+// Top-level confidence gate for tempo-locking. Below this, we keep raw peaks
+// instead of building a grid — protects rubato / free-time music from getting
+// force-quantized to a bogus grid.
+const GRID_CONFIDENCE_FLOOR = 0.4;
 
 function computeEnergyEnvelope(
   samples: Float32Array,
@@ -111,6 +124,22 @@ function computeEnergyEnvelope(
   return { times, energy };
 }
 
+/**
+ * Compute coarse per-band RMS at the same resolution as `computeEnergyEnvelope`.
+ * Used by `detectDropsAndSections` for spectral drop scoring (sub-bass surge,
+ * high-band brightness dip).
+ */
+function computeBandedRms(
+  filtered: Float32Array[],
+  sampleRate: number,
+  windowSec: number
+): number[][] {
+  return filtered.map((band) => {
+    const env = computeEnergyEnvelope(band, sampleRate, windowSec);
+    return env.energy;
+  });
+}
+
 function smooth(values: number[], radius: number): number[] {
   const out = new Array(values.length).fill(0);
   for (let i = 0; i < values.length; i++) {
@@ -125,11 +154,19 @@ function smooth(values: number[], radius: number): number[] {
   return out;
 }
 
+type DropDetail = {
+  jumpMag: number;
+  subSurge: number;
+  brightDip: number;
+  score: number;
+};
+
 function detectDropsAndSections(
   times: number[],
   energy: number[],
-  fps: number
-): { drops: Drop[]; sections: Section[] } {
+  fps: number,
+  bandedRms?: number[][] // optional — when provided, enables spectral scoring
+): { drops: (Drop & Partial<DropDetail>)[]; sections: Section[] } {
   if (energy.length === 0) return { drops: [], sections: [] };
 
   const smoothed = smooth(energy, 3);
@@ -138,8 +175,25 @@ function detectDropsAndSections(
   const range = maxEnergy - minEnergy || 1;
   const normalized = smoothed.map((e) => (e - minEnergy) / range);
 
+  // Spectral character series. subRatio: how much of the energy is sub-bass
+  // (a real drop is preceded by a low-frequency surge). brightness: how much
+  // is in the air band (a build-up's white-noise riser raises this; the drop
+  // moment itself sees brightness DROP as the riser cuts and kick takes over).
+  // bandedRms layout matches DEFAULT_BANDS in dsp.ts: [sub_kick, low_body,
+  // snare_body, snare_brt, hat_air].
+  let subRatio: number[] = [];
+  let brightness: number[] = [];
+  if (bandedRms && bandedRms.length === 5) {
+    const n = Math.min(times.length, bandedRms[0].length);
+    for (let i = 0; i < n; i++) {
+      const total = bandedRms.reduce((a, b) => a + (b[i] ?? 0), 0) || 1;
+      subRatio.push((bandedRms[0][i] ?? 0) / total);
+      brightness.push((bandedRms[4][i] ?? 0) / total);
+    }
+  }
+
   const highThreshold = 0.65;
-  const dropIndices: number[] = [];
+  const dropCandidates: Array<{ i: number; detail: DropDetail }> = [];
   let inHigh = normalized[0] >= highThreshold;
   for (let i = 1; i < normalized.length; i++) {
     const wasLow = !inHigh;
@@ -148,29 +202,61 @@ function detectDropsAndSections(
       const lookahead = normalized.slice(i, Math.min(i + 4, normalized.length));
       const avg = lookahead.reduce((a, b) => a + b, 0) / lookahead.length;
       if (avg >= highThreshold * 0.9) {
-        if (dropIndices.length === 0 || times[i] - times[dropIndices.at(-1)!] >= 6) {
-          dropIndices.push(i);
+        const jumpMag = normalized[i] - (i > 0 ? normalized[i - 1] : 0);
+        let subSurge = 0;
+        let brightDip = 0;
+        if (subRatio.length > 0 && i < subRatio.length) {
+          const subPrior =
+            (subRatio.slice(Math.max(0, i - 4), i).reduce((a, b) => a + b, 0) /
+              Math.max(1, Math.min(i, 4))) || 0;
+          subSurge = subRatio[i] - subPrior;
+          const brightLeading =
+            (brightness
+              .slice(Math.max(0, i - 2), i + 1)
+              .reduce((a, b) => a + b, 0) / 3) || 0;
+          const brightTrailing =
+            (brightness
+              .slice(i + 1, Math.min(brightness.length, i + 4))
+              .reduce((a, b) => a + b, 0) /
+              Math.max(1, Math.min(brightness.length - i - 1, 3))) || 0;
+          brightDip = brightLeading - brightTrailing;
+        }
+        const score = 0.5 * jumpMag + 0.3 * subSurge + 0.2 * brightDip;
+        // Keep all candidates that clear the energy threshold + 6 s gap.
+        const last = dropCandidates.at(-1);
+        if (!last || times[i] - times[last.i] >= 6) {
+          dropCandidates.push({ i, detail: { jumpMag, subSurge, brightDip, score } });
+        } else if (score > last.detail.score) {
+          // Replace the earlier weaker candidate within the 6 s window with
+          // this stronger one — same logic the energy-only path used.
+          dropCandidates[dropCandidates.length - 1] = {
+            i,
+            detail: { jumpMag, subSurge, brightDip, score },
+          };
         }
       }
     }
     inHigh = nowHigh;
   }
 
-  let mainIdx = -1;
-  let mainJump = -Infinity;
-  for (const i of dropIndices) {
-    const prev = i > 0 ? normalized[i - 1] : 0;
-    const jump = normalized[i] - prev;
-    if (jump > mainJump) {
-      mainJump = jump;
-      mainIdx = i;
+  // Top-scoring candidate = main_drop. Others = secondary.
+  let mainPos = -1;
+  let mainScore = -Infinity;
+  for (let p = 0; p < dropCandidates.length; p++) {
+    if (dropCandidates[p].detail.score > mainScore) {
+      mainScore = dropCandidates[p].detail.score;
+      mainPos = p;
     }
   }
 
-  const drops: Drop[] = dropIndices.map((i) => ({
-    time: times[i],
-    frame: Math.round(times[i] * fps),
-    kind: i === mainIdx ? "main_drop" : "secondary_drop",
+  const drops: (Drop & Partial<DropDetail>)[] = dropCandidates.map((c, p) => ({
+    time: times[c.i],
+    frame: Math.round(times[c.i] * fps),
+    kind: p === mainPos ? "main_drop" : "secondary_drop",
+    jumpMag: Math.round(c.detail.jumpMag * 1000) / 1000,
+    subSurge: Math.round(c.detail.subSurge * 1000) / 1000,
+    brightDip: Math.round(c.detail.brightDip * 1000) / 1000,
+    score: Math.round(c.detail.score * 1000) / 1000,
   }));
 
   const sections: Section[] = [];
@@ -304,14 +390,129 @@ async function main() {
     };
   });
 
-  // The log-energy derivative ODF can't fire on the very first frame (there's
-  // no prior frame to diff against). For tracks that start on a downbeat, this
-  // means the analyzer reports its first beat one beat-interval late. Detect
-  // that case and prepend an implicit beat at t=0 so `beats[0]` matches the
-  // music's beat 0 instead of beat 1. Strength is borrowed from the first
-  // detected beat — wrong on real music (Phase 3's tempo-locked grid will
-  // replace this entire heuristic) but a known good-enough stand-in.
-  if (globalBpm > 0 && beats.length > 0) {
+  // ─── Phase 3: tempo-locked grid + bar/phrase inference ───
+  //
+  // If the global BPM estimate is confident enough, build a perfectly
+  // regular grid at that tempo phase-locked to the ODF. Then snap each
+  // detected peak into a grid slot and synthesize "rest" beats where no
+  // onset landed — downstream code sees a complete musical grid instead
+  // of a sparse list of detected events. Autocorrelation of the grid's
+  // strength series then identifies bar position (1..4) and phrase start.
+  //
+  // Below the confidence floor we skip the grid entirely and keep raw
+  // peaks. Rubato / free-time / classical music gets the old behaviour;
+  // pop / EDM / hip-hop with steady tempo gets the structured grid.
+  let gridLocked = false;
+  let gridPhaseFrames = 0;
+  let phrases: Array<{ startBeat: number; endBeat: number; startFrame: number; endFrame: number }> = [];
+
+  if (confidence >= GRID_CONFIDENCE_FLOOR && globalBpm > 0) {
+    console.error(`tempo-locking grid at ${globalBpm.toFixed(2)} BPM...`);
+    const grid = buildTempoGrid(odf, globalBpm, args.odfRate);
+    if (grid.positions.length >= 4) {
+      const snapped: GridSnappedPeak[] = snapToGrid(
+        peaks,
+        grid.positions,
+        odf,
+        args.odfRate,
+        80
+      );
+      console.error(
+        `grid: ${grid.positions.length} slots, ${snapped.filter((s) => !s.synthetic).length} real, ${snapped.filter((s) => s.synthetic).length} synthetic`
+      );
+
+      // Build the grid-locked beat list. Real snapped peaks inherit their
+      // original classification + backtrack from the Phase 2 beats array
+      // (matched by originalFrame). Synthetic beats are classified at their
+      // grid position so they still carry a `kind` field for downstream
+      // routing (a "rest" with sub-band energy still gets `kind: "kick"`).
+      const gridBeats: Beat[] = snapped.map((sp) => {
+        const timeSec = sp.frame / args.odfRate;
+        const frame = Math.round(timeSec * args.fps);
+        if (sp.synthetic) {
+          const cls = classifyBeat(sp.frame, banded.bandedOdf, DEFAULT_BANDS, args.odfRate);
+          const localStrength = Math.round((sp.strength / maxStrength) * 1000) / 1000;
+          return {
+            time: Math.round(timeSec * 1000) / 1000,
+            frame,
+            strength: localStrength,
+            kind: cls.kind,
+            bandEnergies: cls.bandEnergies.map((e) => Math.round(e * 1000) / 1000),
+            synthetic: true,
+          };
+        }
+        const origIdx = peaks.findIndex((p) => p.frame === sp.originalFrame);
+        if (origIdx >= 0) {
+          return {
+            ...beats[origIdx],
+            time: Math.round(timeSec * 1000) / 1000,
+            frame,
+            synthetic: false,
+          };
+        }
+        return {
+          time: Math.round(timeSec * 1000) / 1000,
+          frame,
+          strength: Math.round((sp.strength / maxStrength) * 1000) / 1000,
+          synthetic: false,
+        };
+      });
+
+      // Bar/phrase inference on the locked grid.
+      const strengths = gridBeats.map((b) => b.strength);
+      const kinds = gridBeats.map((b) => b.kind);
+      const structure = inferBarPhrase(strengths, kinds);
+      console.error(
+        `structure: barPhase=${structure.barPhase}, phraseLen=${structure.phraseLen}, phrasePhase=${structure.phrasePhase}, confidence=${(structure.confidence * 100).toFixed(0)}%`
+      );
+
+      for (let i = 0; i < gridBeats.length; i++) {
+        const b = gridBeats[i];
+        const barIdx = ((i - structure.barPhase) % 4 + 4) % 4;
+        const phraseIdx = ((i - structure.phrasePhase) % structure.phraseLen + structure.phraseLen) % structure.phraseLen;
+        b.barPos = (barIdx + 1) as 1 | 2 | 3 | 4;
+        b.phrasePos = phraseIdx;
+        b.downbeat = b.barPos === 1 && phraseIdx === 0;
+      }
+
+      // Build phrase range list — one entry per phrase boundary.
+      let lastStartIdx = -1;
+      for (let i = 0; i < gridBeats.length; i++) {
+        if (gridBeats[i].phrasePos === 0) {
+          if (lastStartIdx >= 0) {
+            phrases.push({
+              startBeat: lastStartIdx,
+              endBeat: i - 1,
+              startFrame: gridBeats[lastStartIdx].frame,
+              endFrame: gridBeats[i].frame,
+            });
+          }
+          lastStartIdx = i;
+        }
+      }
+      // Tail phrase: from the last phrase-start to end of song.
+      if (lastStartIdx >= 0) {
+        phrases.push({
+          startBeat: lastStartIdx,
+          endBeat: gridBeats.length - 1,
+          startFrame: gridBeats[lastStartIdx].frame,
+          endFrame: Math.round(duration * args.fps),
+        });
+      }
+
+      // Replace the beats array with the grid-locked one.
+      beats.length = 0;
+      beats.push(...gridBeats);
+
+      gridLocked = true;
+      gridPhaseFrames = grid.phaseFrames;
+    }
+  }
+
+  // Legacy t=0 prepend — only when the grid isn't locked. With a locked grid,
+  // the first grid slot already covers t=0 (synthetic beat if no real onset
+  // there), so the prepend is redundant and would double-count.
+  if (!gridLocked && globalBpm > 0 && beats.length > 0) {
     const beatInterval = 60 / globalBpm;
     const firstBeatTime = beats[0].time;
     if (firstBeatTime > beatInterval * 0.6 && firstBeatTime < beatInterval * 1.4) {
@@ -325,9 +526,10 @@ async function main() {
     }
   }
 
-  console.error("computing drops + sections from energy envelope...");
+  console.error("computing drops + sections from spectral envelope...");
   const { times, energy } = computeEnergyEnvelope(mono, sampleRate, 0.5);
-  const { drops, sections } = detectDropsAndSections(times, energy, args.fps);
+  const bandedRms = computeBandedRms(banded.filtered, sampleRate, 0.5);
+  const { drops, sections } = detectDropsAndSections(times, energy, args.fps, bandedRms);
   console.error(`found ${drops.length} drops, ${sections.length} sections`);
 
   const out = {
@@ -338,17 +540,22 @@ async function main() {
     bpm: Math.round(globalBpm * 10) / 10,
     bpmConfidence: Math.round(confidence * 100) / 100,
     bpmCurve,
+    gridLocked,
+    gridPhaseFrames: Math.round(gridPhaseFrames * 1000) / 1000,
+    phrases,
     beats,
     drops,
     sections,
     overrides: [] as Array<{ kind: string; time: number; note?: string; action?: string }>,
     analyzer: {
-      version: "0.4.0-banded",
+      version: "0.4.0-banded-structured",
       odfRate: args.odfRate,
       minBpm: args.minBpm,
       maxBpm: args.maxBpm,
       delta: args.delta,
       bandFreqs: DEFAULT_BANDS.map((b) => [b.lo, b.hi]),
+      gridToleranceMs: 80,
+      gridConfidenceFloor: GRID_CONFIDENCE_FLOOR,
     },
     generatedAt: new Date().toISOString(),
   };

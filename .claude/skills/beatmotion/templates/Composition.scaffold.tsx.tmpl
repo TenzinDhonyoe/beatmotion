@@ -21,8 +21,40 @@ __MEDIA_FILES_IMPORT__
 
 const helpers = createBeatHelpers(beatsData);
 
+// Compute the Sequence boundary list once per render. When the analyzer
+// locked a tempo grid, phrase boundaries (every 16 or 32 beats) make for
+// musically meaningful cuts — a 32-beat section becomes 2 Sequences with
+// a slide transition between them. Without a locked grid (rubato music,
+// low BPM confidence) we fall back to the old section-based layout so
+// nothing breaks on free-time tracks.
+const SEQUENCE_BOUNDARIES = (() => {
+  if (helpers.gridLocked && helpers.phrases.length > 0) {
+    return helpers.phrases.map((p, i) => ({
+      key: `phrase-${i}`,
+      startFrame: p.startFrame,
+      endFrame: p.endFrame,
+      sectionIndex: helpers.sections.findIndex(
+        (s) =>
+          s.start <= p.startFrame / helpers.fps &&
+          p.startFrame / helpers.fps < s.end
+      ),
+      kind: "phrase" as const,
+    }));
+  }
+  return helpers.sections.map((section, i) => {
+    const startFrame = Math.round(section.start * helpers.fps);
+    const endFrame = Math.round(section.end * helpers.fps);
+    return {
+      key: `section-${i}`,
+      startFrame,
+      endFrame,
+      sectionIndex: i,
+      kind: "section" as const,
+    };
+  });
+})();
+
 export const __COMP_NAME__: React.FC = () => {
-  const { fps } = useVideoConfig();
   return (
     <AbsoluteFill
       style={{
@@ -32,17 +64,18 @@ export const __COMP_NAME__: React.FC = () => {
       }}
     >
       <Audio src="__AUDIO_SRC__" />
-      {helpers.sections.map((section, i) => {
-        const startFrame = Math.round(section.start * fps);
-        const endFrame = Math.round(section.end * fps);
-        const durationInFrames = Math.max(1, endFrame - startFrame);
+      {SEQUENCE_BOUNDARIES.map((b) => {
+        const durationInFrames = Math.max(1, b.endFrame - b.startFrame);
         return (
           <Sequence
-            key={i}
-            from={startFrame}
+            key={b.key}
+            from={b.startFrame}
             durationInFrames={durationInFrames}
           >
-            <SectionView sectionIndex={i} sectionStartFrame={startFrame} />
+            <SectionView
+              sectionIndex={Math.max(0, b.sectionIndex)}
+              sectionStartFrame={b.startFrame}
+            />
           </Sequence>
         );
       })}

@@ -144,7 +144,14 @@ export function findPeaks(
     if (odf[i] < threshold) continue;
 
     if (peaks.length > 0 && i - peaks[peaks.length - 1].frame < minIntervalFrames) {
-      if (odf[i] > peaks[peaks.length - 1].strength) {
+      // When two candidate peaks fall within the minimum interval, prefer
+      // the earlier one unless the later one is meaningfully stronger.
+      // A cymbal hit's energy can peak ~10–20 ms after the kick that triggered
+      // it; a naive "strongest wins" replacement overwrites the kick with the
+      // cymbal, shifting downstream beat times to the wrong event. The 1.5×
+      // ratio keeps the earlier peak unless we're confident the later one is
+      // a different, louder onset and not just secondary smearing.
+      if (odf[i] > peaks[peaks.length - 1].strength * 1.5) {
         peaks[peaks.length - 1] = { frame: i, time: i / odfRate, strength: odf[i] };
       }
       continue;
@@ -421,4 +428,251 @@ export function backtrackToAttack(
     }
   }
   return peakSample;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Tempo-locked beat grid + bar/phrase inference.
+//
+// This is the structural piece — given a global BPM and an ODF, we find the
+// best phase such that beats laid out at perfectly regular `60/bpm` intervals
+// land on ODF maxima. Once the grid phase is locked, raw detected peaks get
+// snapped into grid slots, and slots with no nearby real peak get a
+// synthetic beat (strength = local ODF) so downstream code sees a complete
+// musical grid instead of a sparse list of detected onsets.
+//
+// The autocorrelation in `inferBarPhrase` runs over the resulting strength
+// series at lags 4, 8, 16, 32 — picking the phase that puts the strongest
+// beats on barPos 1 (and the start of phrases). This is the data Phase 1's
+// `bestBeatForFrame` matcher has been ready to consume all along.
+// ─────────────────────────────────────────────────────────────────────────
+
+export type GridResult = {
+  /** ODF-frame positions of each grid slot (rounded). */
+  positions: number[];
+  /** Phase offset in ODF frames (start of grid). */
+  phaseFrames: number;
+  /** Score of the winning phase (sum of local-max ODF at grid positions). */
+  score: number;
+};
+
+/**
+ * Build a perfectly regular beat grid at the given BPM, phase-locked to the
+ * ODF. Tries `steps` candidate phases in `[0, beatPeriodFrames)` and picks
+ * the one that maximizes the sum of local-max ODF in a ±2-frame window at
+ * each grid position. Returns the positions plus the chosen phase.
+ *
+ * For tracks where the autocorrelation BPM estimate is solid, this gives
+ * tight musical alignment. For free-time / rubato music, the phase fit will
+ * still find SOME alignment but the score will be diffuse — caller should
+ * gate on `bpmConfidence` before trusting the grid.
+ */
+export function buildTempoGrid(
+  odf: Float32Array,
+  bpm: number,
+  odfRate: number,
+  opts: { steps?: number; windowFrames?: number } = {}
+): GridResult {
+  const { steps = 50, windowFrames = 2 } = opts;
+  if (bpm <= 0 || odf.length < 2) {
+    return { positions: [], phaseFrames: 0, score: 0 };
+  }
+
+  const beatPeriodFrames = (60 / bpm) * odfRate;
+  if (beatPeriodFrames < 1) {
+    return { positions: [], phaseFrames: 0, score: 0 };
+  }
+
+  let bestScore = -Infinity;
+  let bestPhase = 0;
+  for (let s = 0; s < steps; s++) {
+    const phase = (s / steps) * beatPeriodFrames;
+    let score = 0;
+    let k = 0;
+    while (true) {
+      const idx = Math.round(phase + k * beatPeriodFrames);
+      if (idx >= odf.length) break;
+      // local-max in ±windowFrames so we don't penalize being 1-2 frames off.
+      const a = Math.max(0, idx - windowFrames);
+      const b = Math.min(odf.length, idx + windowFrames + 1);
+      let local = 0;
+      for (let i = a; i < b; i++) {
+        if (odf[i] > local) local = odf[i];
+      }
+      score += local;
+      k++;
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      bestPhase = phase;
+    }
+  }
+
+  const positions: number[] = [];
+  let k = 0;
+  while (true) {
+    const pos = Math.round(bestPhase + k * beatPeriodFrames);
+    if (pos >= odf.length) break;
+    positions.push(pos);
+    k++;
+  }
+  return { positions, phaseFrames: bestPhase, score: bestScore };
+}
+
+/**
+ * For each grid slot, find the strongest detected peak within `toleranceMs`
+ * and snap it to the slot frame. Slots with no nearby peak get a synthetic
+ * beat (strength = local-max ODF in a small window, `synthetic: true`).
+ *
+ * Returns peaks tagged `synthetic: false` for real detections (with their
+ * strength preserved) and `synthetic: true` for slots filled from ODF.
+ */
+export type GridSnappedPeak = Peak & { synthetic: boolean; originalFrame?: number };
+
+export function snapToGrid(
+  peaks: Peak[],
+  grid: number[],
+  odf: Float32Array,
+  odfRate: number,
+  toleranceMs: number = 80
+): GridSnappedPeak[] {
+  const toleranceFrames = (toleranceMs / 1000) * odfRate;
+  const result: GridSnappedPeak[] = [];
+  // Track which peaks have been consumed so we don't double-assign.
+  const used = new Set<number>();
+  for (const g of grid) {
+    let best = -1;
+    let bestStrength = -Infinity;
+    for (let p = 0; p < peaks.length; p++) {
+      if (used.has(p)) continue;
+      const dist = Math.abs(peaks[p].frame - g);
+      if (dist > toleranceFrames) continue;
+      if (peaks[p].strength > bestStrength) {
+        bestStrength = peaks[p].strength;
+        best = p;
+      }
+    }
+    if (best >= 0) {
+      used.add(best);
+      result.push({
+        ...peaks[best],
+        frame: g,
+        time: g / odfRate,
+        synthetic: false,
+        originalFrame: peaks[best].frame,
+      });
+    } else {
+      // Synthesize a beat at this grid slot. Strength = local-max ODF nearby
+      // so a "rest" slot with no audible onset still has a small non-zero
+      // value the matcher can weight against real strong hits.
+      const a = Math.max(0, g - 1);
+      const b = Math.min(odf.length, g + 2);
+      let local = 0;
+      for (let i = a; i < b; i++) if (odf[i] > local) local = odf[i];
+      result.push({
+        frame: g,
+        time: g / odfRate,
+        strength: local,
+        synthetic: true,
+      });
+    }
+  }
+  return result;
+}
+
+/**
+ * Infer bar position (1..4) and phrase position (0..L-1) for a tempo-locked
+ * beat list. Picks the best 4-beat phase by autocorrelating the strength
+ * series at lag 4; if the choice is ambiguous (within 10% of the second-best),
+ * tie-breaks by which phase aligns more kicks onto barPos 1.
+ *
+ * Phrase length: tries L=16 and L=32, picks whichever has the stronger
+ * autocorrelation peak. This handles both pop (4-bar phrases) and EDM
+ * (8-bar phrases) without configuration.
+ *
+ * Returns the bar phase, phrase length, and phrase phase. Callers apply
+ * these by computing `(beatIndex - barPhase) mod 4` for barPos and
+ * `(beatIndex - phrasePhase) mod phraseLen` for phrasePos.
+ */
+export type StructureInference = {
+  barPhase: number;       // 0..3 — index offset that makes barPos == 1
+  phraseLen: 16 | 32;
+  phrasePhase: number;    // 0..phraseLen-1
+  confidence: number;     // 0..1, autocorrelation peak strength
+};
+
+export function inferBarPhrase(
+  strengths: number[],
+  kinds: Array<string | undefined> = []
+): StructureInference {
+  if (strengths.length < 8) {
+    return { barPhase: 0, phraseLen: 16, phrasePhase: 0, confidence: 0 };
+  }
+
+  // ─── bar phase (lag 4) ───────────────────────────────────────────────
+  const barScores = [0, 0, 0, 0];
+  for (let phase = 0; phase < 4; phase++) {
+    for (let i = phase; i < strengths.length; i += 4) {
+      barScores[phase] += strengths[i];
+    }
+  }
+  let bestBarPhase = 0;
+  let secondBest = 0;
+  let bestBarScore = -Infinity;
+  let secondBarScore = -Infinity;
+  for (let phase = 0; phase < 4; phase++) {
+    if (barScores[phase] > bestBarScore) {
+      secondBarScore = bestBarScore;
+      secondBest = bestBarPhase;
+      bestBarScore = barScores[phase];
+      bestBarPhase = phase;
+    } else if (barScores[phase] > secondBarScore) {
+      secondBarScore = barScores[phase];
+      secondBest = phase;
+    }
+  }
+
+  // Tie-break: if best and second-best are within 10%, prefer the phase
+  // that aligns more `kick` beats onto barPos 1.
+  if (secondBarScore > 0 && bestBarScore - secondBarScore < bestBarScore * 0.1 && kinds.length > 0) {
+    const kickAt = (phase: number) => {
+      let n = 0;
+      for (let i = phase; i < kinds.length; i += 4) {
+        if (kinds[i] === "kick") n++;
+      }
+      return n;
+    };
+    if (kickAt(secondBest) > kickAt(bestBarPhase)) bestBarPhase = secondBest;
+  }
+
+  // ─── phrase length + phase (lag 16 vs 32) ────────────────────────────
+  function evalPhrase(L: 16 | 32): { phase: number; score: number } {
+    let bestPhase = 0;
+    let bestScore = -Infinity;
+    for (let phase = 0; phase < L; phase++) {
+      let s = 0;
+      for (let i = phase; i < strengths.length; i += L) {
+        s += strengths[i];
+      }
+      if (s > bestScore) {
+        bestScore = s;
+        bestPhase = phase;
+      }
+    }
+    return { phase: bestPhase, score: bestScore };
+  }
+  const p16 = evalPhrase(16);
+  const p32 = evalPhrase(32);
+  const phraseLen: 16 | 32 = p32.score > p16.score * 1.1 ? 32 : 16;
+  const phrasePhase = phraseLen === 32 ? p32.phase : p16.phase;
+
+  // Confidence = how dominant the winning bar phase is over the others.
+  const totalBar = barScores.reduce((a, b) => a + b, 0);
+  const confidence = totalBar > 0 ? bestBarScore / totalBar - 0.25 : 0;
+
+  return {
+    barPhase: bestBarPhase,
+    phraseLen,
+    phrasePhase,
+    confidence: Math.max(0, Math.min(1, confidence * 4)),
+  };
 }
