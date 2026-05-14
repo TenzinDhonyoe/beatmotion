@@ -19,14 +19,16 @@ Requirements: [Bun](https://bun.sh), [Claude Code](https://claude.com/claude-cod
 
 Open Claude Code in your project (or any empty directory) and paste this. Claude does the rest.
 
-> Set up beatmotion for me: shallow-clone `https://github.com/TenzinDhonyoe/beatmotion` into a temp directory (e.g. `git clone --depth 1 https://github.com/TenzinDhonyoe/beatmotion /tmp/beatmotion-install`), then copy `.claude/skills/beatmotion` from that clone into `./.claude/skills/beatmotion` in the current directory. If `./.claude/skills/beatmotion` already exists, ask me before overwriting. After install completes, confirm `bun --version` works, check that `.claude/skills/beatmotion/SKILL.md` exists, and show me the project tree. Then tell me to drop my audio file into the project (mp3 / wav / flac) and choose one of: (a) say *"scaffold a comp from song.mp3"* if I don't have a Remotion `<Composition>` yet, or (b) say *"sync src/Composition.tsx to song.mp3"* if I have an existing composition with literal frame numbers. Do not run the skill yourself — wait for me.
+> Set up beatmotion for me: shallow-clone `https://github.com/TenzinDhonyoe/beatmotion` into a temp directory (e.g. `git clone --depth 1 https://github.com/TenzinDhonyoe/beatmotion /tmp/beatmotion-install`), then copy two things from that clone into the current directory:
+>   - `.claude/skills/beatmotion/` → `./.claude/skills/beatmotion/`
+>   - `.claude/commands/sync-beat.md` → `./.claude/commands/sync-beat.md`
+>
+> If either destination already exists, ask me before overwriting. After install completes, confirm `bun --version` works, check that both `./.claude/skills/beatmotion/SKILL.md` and `./.claude/commands/sync-beat.md` exist, and show me the project tree. Then tell me to drop my audio file (mp3 / wav / flac) into the project and just type `/sync-beat` — it auto-detects everything. Do not run the skill yourself — wait for me.
 
 Then:
 
 1. Drop your audio file into the project (e.g. `./song.mp3`)
-2. In Claude Code, say either:
-   - *"Scaffold a comp from `song.mp3`"* — generates a starter `Composition.tsx` cut on the beats
-   - *"Sync `src/Composition.tsx` to `song.mp3`"* — retargets existing animations to the nearest beat
+2. Type `/sync-beat` in Claude Code — it finds the audio, detects whether you already have a `<Composition>`, picks scaffold-vs-sync, and runs the whole flow
 3. Approve the proposed edits one at a time — Claude walks you through each with a diff and a weak-match flag where appropriate
 4. `npx remotion preview` to scrub, then `npx remotion render` when you're happy
 
@@ -52,22 +54,33 @@ Add `--user` to install at `~/.claude/skills/` instead (available in every Claud
 
 ```bash
 git clone https://github.com/TenzinDhonyoe/beatmotion.git
-cp -r beatmotion/.claude/skills/beatmotion <your-project>/.claude/skills/beatmotion
-# or, for user-level:
-cp -r beatmotion/.claude/skills/beatmotion ~/.claude/skills/beatmotion
+# project-level
+mkdir -p <your-project>/.claude/{skills,commands}
+cp -r beatmotion/.claude/skills/beatmotion        <your-project>/.claude/skills/beatmotion
+cp    beatmotion/.claude/commands/sync-beat.md    <your-project>/.claude/commands/sync-beat.md
+# or, for user-level (available in every Claude Code session):
+mkdir -p ~/.claude/{skills,commands}
+cp -r beatmotion/.claude/skills/beatmotion        ~/.claude/skills/beatmotion
+cp    beatmotion/.claude/commands/sync-beat.md    ~/.claude/commands/sync-beat.md
 ```
 
 The skill auto-installs its own deps the first time it runs.
 
 ## Use
 
-Open Claude Code in your Remotion project. Then just say what you want:
+Open Claude Code in your Remotion project, drop an audio file in, and type:
+
+> `/sync-beat`
+
+That's it. The slash command auto-detects your audio (`./`, `public/`, `assets/`, `src/`), detects whether you already have a `<Composition>` with literal frame numbers, picks scaffold-or-sync, and runs the whole flow. Approve the proposed edits one at a time.
+
+Prefer natural language? It still works:
 
 > "I have `song.mp3` and want a beat-synced video — start me off."
 
 Claude will analyze the audio, then scaffold a starter `src/Composition.tsx` with section-aware `<Sequence>` blocks, drop emphasis, and a transition library next to it. Drop `song.mp3` into `public/`, register the composition in your `Root.tsx`, and `npx remotion render`.
 
-Or if you already have a composition:
+Or against an existing composition:
 
 > "Sync the animations in `src/Composition.tsx` to `song.mp3`."
 
