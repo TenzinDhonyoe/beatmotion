@@ -19,7 +19,7 @@ Requirements: [Bun](https://bun.sh), [Claude Code](https://claude.com/claude-cod
 
 Open Claude Code in your project (or any empty directory) and paste this. Claude does the rest.
 
-> Set up beatmotion for me: run `curl -fsSL https://raw.githubusercontent.com/TenzinDhonyoe/beatmotion/main/install.sh | bash` from the current directory. After install completes, confirm `bun --version` works, check that `.claude/skills/beatmotion/SKILL.md` exists, and show me the project tree. Then tell me to drop my audio file into the project (mp3 / wav / flac) and choose one of: (a) say *"scaffold a comp from song.mp3"* if I don't have a Remotion `<Composition>` yet, or (b) say *"sync src/Composition.tsx to song.mp3"* if I have an existing composition with literal frame numbers. Do not run the skill yourself — wait for me.
+> Set up beatmotion for me: shallow-clone `https://github.com/TenzinDhonyoe/beatmotion` into a temp directory (e.g. `git clone --depth 1 https://github.com/TenzinDhonyoe/beatmotion /tmp/beatmotion-install`), then copy `.claude/skills/beatmotion` from that clone into `./.claude/skills/beatmotion` in the current directory. If `./.claude/skills/beatmotion` already exists, ask me before overwriting. After install completes, confirm `bun --version` works, check that `.claude/skills/beatmotion/SKILL.md` exists, and show me the project tree. Then tell me to drop my audio file into the project (mp3 / wav / flac) and choose one of: (a) say *"scaffold a comp from song.mp3"* if I don't have a Remotion `<Composition>` yet, or (b) say *"sync src/Composition.tsx to song.mp3"* if I have an existing composition with literal frame numbers. Do not run the skill yourself — wait for me.
 
 Then:
 
