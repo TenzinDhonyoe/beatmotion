@@ -13,6 +13,27 @@ You never type a `bun` command — Claude runs everything.
 
 *A 5-second clip: scaffolded `<Composition>` cutting on detected beats. Source: `fixtures/click-140bpm-48k.wav`.*
 
+## Quick start
+
+Requirements: [Bun](https://bun.sh), [Claude Code](https://claude.com/claude-code), Git. A Remotion project is optional — you can start with just an mp3.
+
+Open Claude Code in your project (or any empty directory) and paste this. Claude does the rest.
+
+> Set up beatmotion for me: run `curl -fsSL https://raw.githubusercontent.com/TenzinDhonyoe/beatmotion/main/install.sh | bash` from the current directory. After install completes, confirm `bun --version` works, check that `.claude/skills/beatmotion/SKILL.md` exists, and show me the project tree. Then tell me to drop my audio file into the project (mp3 / wav / flac) and choose one of: (a) say *"scaffold a comp from song.mp3"* if I don't have a Remotion `<Composition>` yet, or (b) say *"sync src/Composition.tsx to song.mp3"* if I have an existing composition with literal frame numbers. Do not run the skill yourself — wait for me.
+
+Then:
+
+1. Drop your audio file into the project (e.g. `./song.mp3`)
+2. In Claude Code, say either:
+   - *"Scaffold a comp from `song.mp3`"* — generates a starter `Composition.tsx` cut on the beats
+   - *"Sync `src/Composition.tsx` to `song.mp3`"* — retargets existing animations to the nearest beat
+3. Approve the proposed edits one at a time — Claude walks you through each with a diff and a weak-match flag where appropriate
+4. `npx remotion preview` to scrub, then `npx remotion render` when you're happy
+
+That's the whole loop. No manual beat-counting, no eyeballing waveforms.
+
+Prefer to do it yourself? Every step is spelled out below.
+
 ## Install
 
 > **Prerequisite:** [Bun](https://bun.sh) — `curl -fsSL https://bun.sh/install | bash`
