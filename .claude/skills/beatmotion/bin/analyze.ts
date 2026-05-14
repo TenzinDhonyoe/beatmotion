@@ -333,6 +333,28 @@ async function main() {
     hopSec: 1,
   });
 
+  // BPM fallback: when the global AC is weak (variable-tempo tracks smear
+  // the autocorrelation across multiple lags), trust the highest-confidence
+  // local window from the tempogram instead. A track with a clear intro
+  // groove that drifts mid-song will have a global AC peak near 0 but a
+  // local AC peak in the intro near 0.7+. Using the local one gives the
+  // grid something musical to lock to instead of guessing at the lag floor.
+  let effectiveBpm = globalBpm;
+  let effectiveConfidence = confidence;
+  if (confidence < 0.4 && bpmCurve.length >= 3) {
+    let bestLocal = bpmCurve[0];
+    for (const pt of bpmCurve) {
+      if (pt.confidence > bestLocal.confidence) bestLocal = pt;
+    }
+    if (bestLocal.confidence > confidence * 2 && bestLocal.confidence >= 0.5) {
+      console.error(
+        `global BPM ${globalBpm.toFixed(1)} weak (${(confidence * 100).toFixed(0)}%) — switching to tempogram best: ${bestLocal.bpm.toFixed(1)} BPM @ ${(bestLocal.confidence * 100).toFixed(0)}%`
+      );
+      effectiveBpm = bestLocal.bpm;
+      effectiveConfidence = bestLocal.confidence;
+    }
+  }
+
   console.error("picking onsets...");
   // Min interval = a little tighter than max BPM so we can catch 8th notes if
   // they're stronger than expected — the BPM number itself is not derived
@@ -406,9 +428,9 @@ async function main() {
   let gridPhaseFrames = 0;
   let phrases: Array<{ startBeat: number; endBeat: number; startFrame: number; endFrame: number }> = [];
 
-  if (confidence >= GRID_CONFIDENCE_FLOOR && globalBpm > 0) {
-    console.error(`tempo-locking grid at ${globalBpm.toFixed(2)} BPM...`);
-    const grid = buildTempoGrid(odf, globalBpm, args.odfRate);
+  if (effectiveConfidence >= GRID_CONFIDENCE_FLOOR && effectiveBpm > 0) {
+    console.error(`tempo-locking grid at ${effectiveBpm.toFixed(2)} BPM...`);
+    const grid = buildTempoGrid(odf, effectiveBpm, args.odfRate);
     if (grid.positions.length >= 4) {
       const snapped: GridSnappedPeak[] = snapToGrid(
         peaks,
@@ -475,11 +497,23 @@ async function main() {
         b.downbeat = b.barPos === 1 && phraseIdx === 0;
       }
 
-      // Build phrase range list — one entry per phrase boundary.
+      // Build phrase range list. If the song starts mid-phrase (the first
+      // detected downbeat is at beat >0), include a "pickup" phrase from
+      // frame 0 to the first phrase boundary so the scaffolded composition
+      // covers the full song. Without this, the intro / anacrusis renders
+      // as a black frame.
       let lastStartIdx = -1;
       for (let i = 0; i < gridBeats.length; i++) {
         if (gridBeats[i].phrasePos === 0) {
-          if (lastStartIdx >= 0) {
+          if (lastStartIdx < 0 && i > 0) {
+            // Pickup phrase: 0 → first downbeat. Tagged as a partial.
+            phrases.push({
+              startBeat: 0,
+              endBeat: i - 1,
+              startFrame: 0,
+              endFrame: gridBeats[i].frame,
+            });
+          } else if (lastStartIdx >= 0) {
             phrases.push({
               startBeat: lastStartIdx,
               endBeat: i - 1,
@@ -498,6 +532,15 @@ async function main() {
           startFrame: gridBeats[lastStartIdx].frame,
           endFrame: Math.round(duration * args.fps),
         });
+      } else if (gridBeats.length > 0) {
+        // No phrase boundaries detected (short song). Treat the whole
+        // thing as one phrase.
+        phrases.push({
+          startBeat: 0,
+          endBeat: gridBeats.length - 1,
+          startFrame: 0,
+          endFrame: Math.round(duration * args.fps),
+        });
       }
 
       // Replace the beats array with the grid-locked one.
@@ -512,8 +555,8 @@ async function main() {
   // Legacy t=0 prepend — only when the grid isn't locked. With a locked grid,
   // the first grid slot already covers t=0 (synthetic beat if no real onset
   // there), so the prepend is redundant and would double-count.
-  if (!gridLocked && globalBpm > 0 && beats.length > 0) {
-    const beatInterval = 60 / globalBpm;
+  if (!gridLocked && effectiveBpm > 0 && beats.length > 0) {
+    const beatInterval = 60 / effectiveBpm;
     const firstBeatTime = beats[0].time;
     if (firstBeatTime > beatInterval * 0.6 && firstBeatTime < beatInterval * 1.4) {
       beats.unshift({
@@ -537,8 +580,10 @@ async function main() {
     duration,
     sampleRate,
     fps: args.fps,
-    bpm: Math.round(globalBpm * 10) / 10,
-    bpmConfidence: Math.round(confidence * 100) / 100,
+    bpm: Math.round(effectiveBpm * 10) / 10,
+    bpmConfidence: Math.round(effectiveConfidence * 100) / 100,
+    bpmGlobal: Math.round(globalBpm * 10) / 10,
+    bpmGlobalConfidence: Math.round(confidence * 100) / 100,
     bpmCurve,
     gridLocked,
     gridPhaseFrames: Math.round(gridPhaseFrames * 1000) / 1000,

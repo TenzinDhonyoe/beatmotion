@@ -666,11 +666,17 @@ export function inferBarPhrase(
   // toward shorter lags (lag 16 has 2× the terms of lag 32 in any signal,
   // so its sum is naturally bigger). The per-sample average answers the
   // right question: "does every Nth slot carry above-average strength?"
+  //
+  // Phase is constrained to bar-aligned positions (`phase mod 4 ===
+  // bestBarPhase mod 4`). Without this constraint, phraseLen=32 phrases
+  // can land out of phase with the bar grid — and downbeats (which require
+  // barPos==1 AND phrasePos==0 simultaneously) can never fire. Musically
+  // a phrase always starts on a downbeat, so this is the right constraint.
   function evalPhrase(L: 16 | 32): { phase: number; score: number; avg: number } {
-    let bestPhase = 0;
+    let bestPhase = bestBarPhase;
     let bestSum = -Infinity;
     let bestCount = 0;
-    for (let phase = 0; phase < L; phase++) {
+    for (let phase = bestBarPhase; phase < L; phase += 4) {
       let s = 0;
       let n = 0;
       for (let i = phase; i < strengths.length; i += L) {
