@@ -19,6 +19,7 @@ import {
   backtrackToAttack,
   buildTempoGrid,
   classifyBeat,
+  clusterTempoSegments,
   computeBandedAudio,
   computeODF,
   detectBpm,
@@ -29,6 +30,7 @@ import {
   tempogram,
   type BeatKind,
   type GridSnappedPeak,
+  type TempoSegment,
 } from "./dsp.ts";
 
 type Args = {
@@ -93,6 +95,15 @@ type Beat = {
   phrasePos?: number;
   downbeat?: boolean;
   synthetic?: boolean;
+  segment?: number;
+};
+
+type EnrichedTempoSegment = TempoSegment & {
+  gridPhaseFrames: number;
+  barPhase: number;
+  phraseLen: 16 | 32;
+  phrasePhase: number;
+  structureConfidence: number;
 };
 type Drop = { time: number; frame: number; kind: string };
 type Section = { start: number; end: number; kind: string };
@@ -412,55 +423,128 @@ async function main() {
     };
   });
 
-  // ─── Phase 3: tempo-locked grid + bar/phrase inference ───
+  // ─── Phase 3 (multi-segment): tempo-locked grids per stable-tempo segment ───
   //
-  // If the global BPM estimate is confident enough, build a perfectly
-  // regular grid at that tempo phase-locked to the ODF. Then snap each
-  // detected peak into a grid slot and synthesize "rest" beats where no
-  // onset landed — downstream code sees a complete musical grid instead
-  // of a sparse list of detected events. Autocorrelation of the grid's
-  // strength series then identifies bar position (1..4) and phrase start.
-  //
-  // Below the confidence floor we skip the grid entirely and keep raw
-  // peaks. Rubato / free-time / classical music gets the old behaviour;
-  // pop / EDM / hip-hop with steady tempo gets the structured grid.
+  // For songs with variable tempo (intro at 85 BPM, chorus at 130 BPM, etc.),
+  // a single global grid is wrong in the sections that don't match. Slice the
+  // tempogram into stable-tempo segments, then build a separate grid per
+  // segment with its own phase, bar/phrase inference, etc. Steady-tempo songs
+  // collapse to one segment that spans the whole track — non-regression for
+  // the synthetic-click fixtures.
   let gridLocked = false;
   let gridPhaseFrames = 0;
   let phrases: Array<{ startBeat: number; endBeat: number; startFrame: number; endFrame: number }> = [];
+  const tempoSegments: EnrichedTempoSegment[] = [];
 
-  if (effectiveConfidence >= GRID_CONFIDENCE_FLOOR && effectiveBpm > 0) {
-    console.error(`tempo-locking grid at ${effectiveBpm.toFixed(2)} BPM...`);
-    const grid = buildTempoGrid(odf, effectiveBpm, args.odfRate);
-    if (grid.positions.length >= 4) {
+  // Clustering candidates. If no tempogram (very short songs), fall back to a
+  // single synthetic segment using the effective BPM.
+  const candidateSegments =
+    bpmCurve.length >= 3
+      ? clusterTempoSegments(bpmCurve, duration, { tolerance: 10, minDurationSec: 4 })
+      : effectiveBpm > 0
+      ? [{ startSec: 0, endSec: duration, bpm: effectiveBpm, confidence: effectiveConfidence }]
+      : [];
+
+  // Drop segments whose confidence is below the floor and extend the nearest
+  // confident neighbour to cover their time range. A typical real-music
+  // analysis has one strongly-confident segment (e.g. the intro groove)
+  // surrounded by chaotic sections where the autocorrelation can't decide on
+  // a tempo. Extending the good segment over the bad ranges keeps the grid
+  // musically anchored to the section we're sure about — wrong for genuine
+  // tempo changes, but better than locking to a guessed tempo at 30%.
+  const goodSegments = candidateSegments.filter(
+    (s) => s.confidence >= GRID_CONFIDENCE_FLOOR
+  );
+  let usableSegments: TempoSegment[];
+  if (goodSegments.length === 0) {
+    usableSegments =
+      effectiveConfidence >= GRID_CONFIDENCE_FLOOR && effectiveBpm > 0
+        ? [{ startSec: 0, endSec: duration, bpm: effectiveBpm, confidence: effectiveConfidence }]
+        : [];
+  } else {
+    // For each candidate segment, if it's good keep it; if not, attach its
+    // time range to the nearest good neighbour by midpoint distance.
+    const filled: TempoSegment[] = goodSegments.map((s) => ({ ...s }));
+    const isGood = new Set(goodSegments);
+    for (const cs of candidateSegments) {
+      if (isGood.has(cs)) continue;
+      // Pick nearest good segment by midpoint distance.
+      const csMid = (cs.startSec + cs.endSec) / 2;
+      let nearest = filled[0];
+      let nearestDist = Math.abs((filled[0].startSec + filled[0].endSec) / 2 - csMid);
+      for (const g of filled) {
+        const d = Math.abs((g.startSec + g.endSec) / 2 - csMid);
+        if (d < nearestDist) {
+          nearest = g;
+          nearestDist = d;
+        }
+      }
+      // Extend nearest's range to absorb the bad segment.
+      nearest.startSec = Math.min(nearest.startSec, cs.startSec);
+      nearest.endSec = Math.max(nearest.endSec, cs.endSec);
+    }
+    // Sort + drop duplicates / overlaps (extending may have created them).
+    filled.sort((a, b) => a.startSec - b.startSec);
+    const deduped: TempoSegment[] = [];
+    for (const f of filled) {
+      const last = deduped.at(-1);
+      if (last && f.startSec < last.endSec) {
+        last.endSec = Math.max(last.endSec, f.endSec);
+      } else {
+        deduped.push({ ...f });
+      }
+    }
+    usableSegments = deduped;
+  }
+
+  if (usableSegments.length > 0) {
+    console.error(
+      `tempo segments: ${usableSegments
+        .map((s) => `${s.startSec.toFixed(1)}-${s.endSec.toFixed(1)}s @ ${s.bpm} BPM (${(s.confidence * 100).toFixed(0)}%)`)
+        .join("; ")}`
+    );
+
+    const allGridBeats: Beat[] = [];
+    for (let segIdx = 0; segIdx < usableSegments.length; segIdx++) {
+      const seg = usableSegments[segIdx];
+      const segStartOdfFrame = Math.max(0, Math.floor(seg.startSec * args.odfRate));
+      const segEndOdfFrame = Math.min(odf.length, Math.ceil(seg.endSec * args.odfRate));
+      if (segEndOdfFrame - segStartOdfFrame < args.odfRate * 60 / args.maxBpm) {
+        // Too short for even a single beat at the max BPM — skip.
+        continue;
+      }
+      const odfSlice = odf.subarray(segStartOdfFrame, segEndOdfFrame);
+      const localGrid = buildTempoGrid(odfSlice, seg.bpm, args.odfRate);
+      if (localGrid.positions.length < 2) continue;
+
+      // Translate grid positions from slice-local back to global ODF frames.
+      const globalPositions = localGrid.positions.map((p) => p + segStartOdfFrame);
+
+      // Snap only the peaks that fall within this segment's time range.
+      const segPeaks = peaks.filter(
+        (p) => p.frame >= segStartOdfFrame && p.frame < segEndOdfFrame
+      );
       const snapped: GridSnappedPeak[] = snapToGrid(
-        peaks,
-        grid.positions,
+        segPeaks,
+        globalPositions,
         odf,
         args.odfRate,
         80
       );
-      console.error(
-        `grid: ${grid.positions.length} slots, ${snapped.filter((s) => !s.synthetic).length} real, ${snapped.filter((s) => s.synthetic).length} synthetic`
-      );
 
-      // Build the grid-locked beat list. Real snapped peaks inherit their
-      // original classification + backtrack from the Phase 2 beats array
-      // (matched by originalFrame). Synthetic beats are classified at their
-      // grid position so they still carry a `kind` field for downstream
-      // routing (a "rest" with sub-band energy still gets `kind: "kick"`).
-      const gridBeats: Beat[] = snapped.map((sp) => {
+      const segBeats: Beat[] = snapped.map((sp) => {
         const timeSec = sp.frame / args.odfRate;
         const frame = Math.round(timeSec * args.fps);
         if (sp.synthetic) {
           const cls = classifyBeat(sp.frame, banded.bandedOdf, DEFAULT_BANDS, args.odfRate);
-          const localStrength = Math.round((sp.strength / maxStrength) * 1000) / 1000;
           return {
             time: Math.round(timeSec * 1000) / 1000,
             frame,
-            strength: localStrength,
+            strength: Math.round((sp.strength / maxStrength) * 1000) / 1000,
             kind: cls.kind,
             bandEnergies: cls.bandEnergies.map((e) => Math.round(e * 1000) / 1000),
             synthetic: true,
+            segment: segIdx,
           };
         }
         const origIdx = peaks.findIndex((p) => p.frame === sp.originalFrame);
@@ -470,6 +554,7 @@ async function main() {
             time: Math.round(timeSec * 1000) / 1000,
             frame,
             synthetic: false,
+            segment: segIdx,
           };
         }
         return {
@@ -477,78 +562,88 @@ async function main() {
           frame,
           strength: Math.round((sp.strength / maxStrength) * 1000) / 1000,
           synthetic: false,
+          segment: segIdx,
         };
       });
 
-      // Bar/phrase inference on the locked grid.
-      const strengths = gridBeats.map((b) => b.strength);
-      const kinds = gridBeats.map((b) => b.kind);
-      const structure = inferBarPhrase(strengths, kinds);
-      console.error(
-        `structure: barPhase=${structure.barPhase}, phraseLen=${structure.phraseLen}, phrasePhase=${structure.phrasePhase}, confidence=${(structure.confidence * 100).toFixed(0)}%`
-      );
-
-      for (let i = 0; i < gridBeats.length; i++) {
-        const b = gridBeats[i];
+      // Per-segment bar/phrase inference. Each segment carries its own
+      // structure — the chorus might be 32-beat phrases while the intro is
+      // 16-beat, etc.
+      const segStrengths = segBeats.map((b) => b.strength);
+      const segKinds = segBeats.map((b) => b.kind);
+      const structure = inferBarPhrase(segStrengths, segKinds);
+      for (let i = 0; i < segBeats.length; i++) {
         const barIdx = ((i - structure.barPhase) % 4 + 4) % 4;
-        const phraseIdx = ((i - structure.phrasePhase) % structure.phraseLen + structure.phraseLen) % structure.phraseLen;
-        b.barPos = (barIdx + 1) as 1 | 2 | 3 | 4;
-        b.phrasePos = phraseIdx;
-        b.downbeat = b.barPos === 1 && phraseIdx === 0;
+        const phraseIdx =
+          ((i - structure.phrasePhase) % structure.phraseLen + structure.phraseLen) %
+          structure.phraseLen;
+        segBeats[i].barPos = (barIdx + 1) as 1 | 2 | 3 | 4;
+        segBeats[i].phrasePos = phraseIdx;
+        segBeats[i].downbeat = segBeats[i].barPos === 1 && phraseIdx === 0;
       }
 
-      // Build phrase range list. If the song starts mid-phrase (the first
-      // detected downbeat is at beat >0), include a "pickup" phrase from
-      // frame 0 to the first phrase boundary so the scaffolded composition
-      // covers the full song. Without this, the intro / anacrusis renders
-      // as a black frame.
+      tempoSegments.push({
+        ...seg,
+        gridPhaseFrames: Math.round((localGrid.phaseFrames + segStartOdfFrame) * 1000) / 1000,
+        barPhase: structure.barPhase,
+        phraseLen: structure.phraseLen,
+        phrasePhase: structure.phrasePhase,
+        structureConfidence: Math.round(structure.confidence * 100) / 100,
+      });
+
+      allGridBeats.push(...segBeats);
+    }
+
+    if (allGridBeats.length > 0) {
+      // Sort by frame (segments don't overlap, but defensive).
+      allGridBeats.sort((a, b) => a.frame - b.frame);
+
+      // Build phrase ranges from contiguous downbeats. Includes a pickup
+      // phrase from frame 0 to the first downbeat so the scaffolded
+      // composition covers the full song.
       let lastStartIdx = -1;
-      for (let i = 0; i < gridBeats.length; i++) {
-        if (gridBeats[i].phrasePos === 0) {
+      for (let i = 0; i < allGridBeats.length; i++) {
+        if (allGridBeats[i].downbeat) {
           if (lastStartIdx < 0 && i > 0) {
-            // Pickup phrase: 0 → first downbeat. Tagged as a partial.
             phrases.push({
               startBeat: 0,
               endBeat: i - 1,
               startFrame: 0,
-              endFrame: gridBeats[i].frame,
+              endFrame: allGridBeats[i].frame,
             });
           } else if (lastStartIdx >= 0) {
             phrases.push({
               startBeat: lastStartIdx,
               endBeat: i - 1,
-              startFrame: gridBeats[lastStartIdx].frame,
-              endFrame: gridBeats[i].frame,
+              startFrame: allGridBeats[lastStartIdx].frame,
+              endFrame: allGridBeats[i].frame,
             });
           }
           lastStartIdx = i;
         }
       }
-      // Tail phrase: from the last phrase-start to end of song.
       if (lastStartIdx >= 0) {
         phrases.push({
           startBeat: lastStartIdx,
-          endBeat: gridBeats.length - 1,
-          startFrame: gridBeats[lastStartIdx].frame,
+          endBeat: allGridBeats.length - 1,
+          startFrame: allGridBeats[lastStartIdx].frame,
           endFrame: Math.round(duration * args.fps),
         });
-      } else if (gridBeats.length > 0) {
-        // No phrase boundaries detected (short song). Treat the whole
-        // thing as one phrase.
+      } else {
+        // No downbeats anywhere — treat the whole track as one phrase.
         phrases.push({
           startBeat: 0,
-          endBeat: gridBeats.length - 1,
+          endBeat: allGridBeats.length - 1,
           startFrame: 0,
           endFrame: Math.round(duration * args.fps),
         });
       }
 
-      // Replace the beats array with the grid-locked one.
       beats.length = 0;
-      beats.push(...gridBeats);
+      beats.push(...allGridBeats);
 
       gridLocked = true;
-      gridPhaseFrames = grid.phaseFrames;
+      gridPhaseFrames = tempoSegments[0]?.gridPhaseFrames ?? 0;
     }
   }
 
@@ -587,13 +682,14 @@ async function main() {
     bpmCurve,
     gridLocked,
     gridPhaseFrames: Math.round(gridPhaseFrames * 1000) / 1000,
+    tempoSegments,
     phrases,
     beats,
     drops,
     sections,
     overrides: [] as Array<{ kind: string; time: number; note?: string; action?: string }>,
     analyzer: {
-      version: "0.4.0-banded-structured",
+      version: "0.5.0-multi-tempo",
       odfRate: args.odfRate,
       minBpm: args.minBpm,
       maxBpm: args.maxBpm,

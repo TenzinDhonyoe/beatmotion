@@ -711,3 +711,169 @@ export function inferBarPhrase(
     confidence: Math.max(0, Math.min(1, confidence * 4)),
   };
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// Multi-segment tempo clustering.
+//
+// For songs with variable tempo (intro at 85 BPM, chorus at 130 BPM, etc.),
+// a single global grid is wrong half the time. Instead, slice the tempogram
+// into segments where the local BPM is stable to within `tolerance`, then
+// build a grid per segment. The result: each section of the song locks to
+// its own tempo and phrase, with bar/phrase structure inferred locally.
+//
+// Steady-tempo songs collapse to a single segment covering the whole track,
+// so this is a non-regression for the synthetic-click fixtures.
+// ─────────────────────────────────────────────────────────────────────────
+
+export type TempoSegment = {
+  startSec: number;
+  endSec: number;
+  bpm: number;
+  confidence: number;
+};
+
+/**
+ * Cluster a tempogram into stable-tempo segments. Steps:
+ *
+ *   1. Median-filter the bpmCurve (5-point window) to smooth out single-window
+ *      misdetections.
+ *   2. Walk through the smoothed curve, starting a new segment whenever the
+ *      BPM jumps by more than `tolerance` BPM from the running average.
+ *   3. Merge segments shorter than `minDurationSec` into their better-confident
+ *      neighbour — short blips are usually tempogram noise, not real tempo
+ *      changes.
+ *   4. Extend segment edges so the result tiles `[0, totalDurationSec)` with no
+ *      gaps (fills with the nearest segment's BPM).
+ */
+export function clusterTempoSegments(
+  bpmCurve: Array<{ time: number; bpm: number; confidence: number }>,
+  totalDurationSec: number,
+  opts: { tolerance?: number; minDurationSec?: number } = {}
+): TempoSegment[] {
+  const { tolerance = 8, minDurationSec = 4 } = opts;
+  if (bpmCurve.length === 0) return [];
+
+  // ─── Step 1: median-filter ──────────────────────────────────────────
+  const smoothed: typeof bpmCurve = [];
+  for (let i = 0; i < bpmCurve.length; i++) {
+    const a = Math.max(0, i - 2);
+    const b = Math.min(bpmCurve.length, i + 3);
+    const window: number[] = [];
+    for (let j = a; j < b; j++) window.push(bpmCurve[j].bpm);
+    window.sort((x, y) => x - y);
+    const medianBpm = window[Math.floor(window.length / 2)];
+    smoothed.push({ time: bpmCurve[i].time, bpm: medianBpm, confidence: bpmCurve[i].confidence });
+  }
+
+  // ─── Step 2: cluster ───────────────────────────────────────────────
+  type Acc = { startTime: number; endTime: number; sumBpm: number; sumConf: number; count: number };
+  const accs: Acc[] = [];
+  let cur: Acc = {
+    startTime: 0,
+    endTime: smoothed[0].time,
+    sumBpm: smoothed[0].bpm,
+    sumConf: smoothed[0].confidence,
+    count: 1,
+  };
+  for (let i = 1; i < smoothed.length; i++) {
+    const pt = smoothed[i];
+    const curAvg = cur.sumBpm / cur.count;
+    if (Math.abs(pt.bpm - curAvg) > tolerance) {
+      // Close the current segment, start a new one.
+      accs.push(cur);
+      cur = { startTime: pt.time, endTime: pt.time, sumBpm: pt.bpm, sumConf: pt.confidence, count: 1 };
+    } else {
+      cur.sumBpm += pt.bpm;
+      cur.sumConf += pt.confidence;
+      cur.count++;
+      cur.endTime = pt.time;
+    }
+  }
+  accs.push(cur);
+
+  // ─── Step 3: merge short segments into neighbours ──────────────────
+  // Iterate until stable. Each merge picks the neighbour with higher
+  // confidence; this preserves the stronger tempo evidence.
+  let segments = accs.map((a) => ({
+    startTime: a.startTime,
+    endTime: a.endTime,
+    bpm: a.sumBpm / a.count,
+    confidence: a.sumConf / a.count,
+  }));
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (let i = 0; i < segments.length; i++) {
+      const seg = segments[i];
+      if (seg.endTime - seg.startTime >= minDurationSec) continue;
+      // Pick neighbour with higher confidence (or either if at edge).
+      const prev = i > 0 ? segments[i - 1] : null;
+      const next = i < segments.length - 1 ? segments[i + 1] : null;
+      const pickPrev = prev && (!next || prev.confidence >= next.confidence);
+      if (pickPrev) {
+        prev!.endTime = seg.endTime;
+        segments.splice(i, 1);
+      } else if (next) {
+        next.startTime = seg.startTime;
+        segments.splice(i, 1);
+      } else {
+        // Only one segment; nothing to merge into.
+        break;
+      }
+      changed = true;
+      break;
+    }
+  }
+
+  // ─── Step 4: octave-merge adjacent neighbours ──────────────────────
+  // A 128-BPM song with a kick-only intro autocorrelates strongest at lag
+  // corresponding to 64 BPM during the intro (kicks happen every 2 beats),
+  // then snaps to 128 BPM once snares fill in. The tempogram dutifully
+  // reports two "different" tempos, but musically the song is 128 throughout
+  // — the drummer is just playing sparsely at the start. When adjacent
+  // segments are within 5% of an exact 2× ratio, merge them at the higher
+  // BPM (the "actual" musical tempo, recovered once the full drum pattern
+  // is in place).
+  let merged = true;
+  while (merged && segments.length >= 2) {
+    merged = false;
+    for (let i = 1; i < segments.length; i++) {
+      const a = segments[i - 1];
+      const b = segments[i];
+      const lo = Math.min(a.bpm, b.bpm);
+      const hi = Math.max(a.bpm, b.bpm);
+      if (lo > 0 && Math.abs(hi / lo - 2) < 0.1) {
+        // Octave-related → merge to the higher BPM.
+        segments[i - 1] = {
+          startTime: a.startTime,
+          endTime: b.endTime,
+          bpm: hi,
+          confidence: Math.max(a.confidence, b.confidence),
+        };
+        segments.splice(i, 1);
+        merged = true;
+        break;
+      }
+    }
+  }
+
+  // ─── Step 5: tile [0, totalDurationSec) with no gaps ───────────────
+  if (segments.length === 0) return [];
+  segments[0].startTime = 0;
+  segments[segments.length - 1].endTime = totalDurationSec;
+  for (let i = 1; i < segments.length; i++) {
+    if (segments[i].startTime > segments[i - 1].endTime) {
+      // Gap: split the gap evenly between neighbours.
+      const mid = (segments[i - 1].endTime + segments[i].startTime) / 2;
+      segments[i - 1].endTime = mid;
+      segments[i].startTime = mid;
+    }
+  }
+
+  return segments.map((s) => ({
+    startSec: Math.round(s.startTime * 1000) / 1000,
+    endSec: Math.round(s.endTime * 1000) / 1000,
+    bpm: Math.round(s.bpm * 10) / 10,
+    confidence: Math.round(s.confidence * 100) / 100,
+  }));
+}
