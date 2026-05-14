@@ -1,29 +1,42 @@
 # beatmotion
 
-A Claude Code skill that syncs [Remotion](https://remotion.dev) animations to music. Two paths depending on where you are:
+A Claude Code skill that syncs [Remotion](https://remotion.dev) animations to music. *(Remotion is a framework for building videos programmatically in React.)* Two paths depending on where you are:
 
 - **Scaffold** — you have an mp3 and no composition yet. The skill detects beats / drops / sections, then writes a starter `Composition.tsx` with beat-synced cuts, drop emphasis, and a small transition library wired up. Optionally binds image media you point it at.
 - **Sync** — you have an mp3 and an existing composition with literal frame numbers. The skill detects beats and walks you through retargeting each `interpolate` / `spring` / `<Sequence>` to the nearest beat, flagging weak matches so it never silently misaligns.
 
 You never type a `bun` command — Claude runs everything.
 
+## Demo
+
+![beatmotion demo](docs/demo.gif)
+
+*A 5-second clip: scaffolded `<Composition>` cutting on detected beats. Source: `fixtures/click-140bpm-48k.wav`.*
+
 ## Install
 
-This repo **is** the skill. To use it in any Remotion project:
+> **Prerequisite:** [Bun](https://bun.sh) — `curl -fsSL https://bun.sh/install | bash`
+
+### Option A — one-liner (recommended)
+
+From inside your Remotion project:
 
 ```bash
-# Option A — per-project (recommended; works only in that project)
-cp -r /path/to/this/repo/.claude/skills/beatmotion <your-project>/.claude/skills/beatmotion
-
-# Option B — user-level (works in every Claude Code session)
-cp -r /path/to/this/repo/.claude/skills/beatmotion ~/.claude/skills/beatmotion
+curl -fsSL https://raw.githubusercontent.com/TenzinDhonyoe/beatmotion/main/install.sh | bash
 ```
 
-The skill auto-installs its own deps the first time it runs. The only prerequisite is [Bun](https://bun.sh):
+Add `--user` to install at `~/.claude/skills/` instead (available in every Claude Code session).
+
+### Option B — manual
 
 ```bash
-curl -fsSL https://bun.sh/install | bash
+git clone https://github.com/TenzinDhonyoe/beatmotion.git
+cp -r beatmotion/.claude/skills/beatmotion <your-project>/.claude/skills/beatmotion
+# or, for user-level:
+cp -r beatmotion/.claude/skills/beatmotion ~/.claude/skills/beatmotion
 ```
+
+The skill auto-installs its own deps the first time it runs.
 
 ## Use
 
