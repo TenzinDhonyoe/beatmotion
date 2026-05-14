@@ -1,0 +1,1901 @@
+{
+  "audio": "mock-128bpm-chorus.wav",
+  "sampleRate": 44100,
+  "fps": 30,
+  "bpm": 128,
+  "duration": 45,
+  "sections": [
+    {
+      "name": "intro",
+      "startSec": 0,
+      "endSec": 7.5
+    },
+    {
+      "name": "build",
+      "startSec": 7.5,
+      "endSec": 15
+    },
+    {
+      "name": "drop",
+      "startSec": 15,
+      "endSec": 37.5
+    },
+    {
+      "name": "outro",
+      "startSec": 37.5,
+      "endSec": 45
+    }
+  ],
+  "drop": {
+    "bar": 9,
+    "timeSec": 15,
+    "frame": 450
+  },
+  "phraseLength": 16,
+  "phraseBoundaries": [
+    0,
+    225,
+    450,
+    675,
+    900,
+    1125
+  ],
+  "beats": [
+    {
+      "time": 0,
+      "frame": 0,
+      "bar": 1,
+      "beat": 1,
+      "kind": "kick",
+      "section": "intro"
+    },
+    {
+      "time": 0.234,
+      "frame": 7,
+      "bar": 1,
+      "beat": 1,
+      "kind": "hat",
+      "section": "intro"
+    },
+    {
+      "time": 0.703,
+      "frame": 21,
+      "bar": 1,
+      "beat": 2,
+      "kind": "hat",
+      "section": "intro"
+    },
+    {
+      "time": 0.938,
+      "frame": 28,
+      "bar": 1,
+      "beat": 3,
+      "kind": "kick",
+      "section": "intro"
+    },
+    {
+      "time": 1.172,
+      "frame": 35,
+      "bar": 1,
+      "beat": 3,
+      "kind": "hat",
+      "section": "intro"
+    },
+    {
+      "time": 1.641,
+      "frame": 49,
+      "bar": 1,
+      "beat": 4,
+      "kind": "hat",
+      "section": "intro"
+    },
+    {
+      "time": 1.875,
+      "frame": 56,
+      "bar": 2,
+      "beat": 1,
+      "kind": "kick",
+      "section": "intro"
+    },
+    {
+      "time": 2.109,
+      "frame": 63,
+      "bar": 2,
+      "beat": 1,
+      "kind": "hat",
+      "section": "intro"
+    },
+    {
+      "time": 2.578,
+      "frame": 77,
+      "bar": 2,
+      "beat": 2,
+      "kind": "hat",
+      "section": "intro"
+    },
+    {
+      "time": 2.813,
+      "frame": 84,
+      "bar": 2,
+      "beat": 3,
+      "kind": "kick",
+      "section": "intro"
+    },
+    {
+      "time": 3.047,
+      "frame": 91,
+      "bar": 2,
+      "beat": 3,
+      "kind": "hat",
+      "section": "intro"
+    },
+    {
+      "time": 3.516,
+      "frame": 105,
+      "bar": 2,
+      "beat": 4,
+      "kind": "hat",
+      "section": "intro"
+    },
+    {
+      "time": 3.75,
+      "frame": 113,
+      "bar": 3,
+      "beat": 1,
+      "kind": "kick",
+      "section": "intro"
+    },
+    {
+      "time": 3.984,
+      "frame": 120,
+      "bar": 3,
+      "beat": 1,
+      "kind": "hat",
+      "section": "intro"
+    },
+    {
+      "time": 4.453,
+      "frame": 134,
+      "bar": 3,
+      "beat": 2,
+      "kind": "hat",
+      "section": "intro"
+    },
+    {
+      "time": 4.688,
+      "frame": 141,
+      "bar": 3,
+      "beat": 3,
+      "kind": "kick",
+      "section": "intro"
+    },
+    {
+      "time": 4.922,
+      "frame": 148,
+      "bar": 3,
+      "beat": 3,
+      "kind": "hat",
+      "section": "intro"
+    },
+    {
+      "time": 5.391,
+      "frame": 162,
+      "bar": 3,
+      "beat": 4,
+      "kind": "hat",
+      "section": "intro"
+    },
+    {
+      "time": 5.625,
+      "frame": 169,
+      "bar": 4,
+      "beat": 1,
+      "kind": "kick",
+      "section": "intro"
+    },
+    {
+      "time": 5.859,
+      "frame": 176,
+      "bar": 4,
+      "beat": 1,
+      "kind": "hat",
+      "section": "intro"
+    },
+    {
+      "time": 6.328,
+      "frame": 190,
+      "bar": 4,
+      "beat": 2,
+      "kind": "hat",
+      "section": "intro"
+    },
+    {
+      "time": 6.563,
+      "frame": 197,
+      "bar": 4,
+      "beat": 3,
+      "kind": "kick",
+      "section": "intro"
+    },
+    {
+      "time": 6.797,
+      "frame": 204,
+      "bar": 4,
+      "beat": 3,
+      "kind": "hat",
+      "section": "intro"
+    },
+    {
+      "time": 7.266,
+      "frame": 218,
+      "bar": 4,
+      "beat": 4,
+      "kind": "hat",
+      "section": "intro"
+    },
+    {
+      "time": 7.5,
+      "frame": 225,
+      "bar": 5,
+      "beat": 1,
+      "kind": "kick",
+      "section": "build"
+    },
+    {
+      "time": 7.5,
+      "frame": 225,
+      "bar": 5,
+      "beat": 1,
+      "kind": "hat",
+      "section": "build"
+    },
+    {
+      "time": 7.734,
+      "frame": 232,
+      "bar": 5,
+      "beat": 1,
+      "kind": "hat",
+      "section": "build"
+    },
+    {
+      "time": 7.969,
+      "frame": 239,
+      "bar": 5,
+      "beat": 2,
+      "kind": "snare",
+      "section": "build"
+    },
+    {
+      "time": 7.969,
+      "frame": 239,
+      "bar": 5,
+      "beat": 2,
+      "kind": "hat",
+      "section": "build"
+    },
+    {
+      "time": 8.203,
+      "frame": 246,
+      "bar": 5,
+      "beat": 2,
+      "kind": "hat",
+      "section": "build"
+    },
+    {
+      "time": 8.438,
+      "frame": 253,
+      "bar": 5,
+      "beat": 3,
+      "kind": "kick",
+      "section": "build"
+    },
+    {
+      "time": 8.438,
+      "frame": 253,
+      "bar": 5,
+      "beat": 3,
+      "kind": "hat",
+      "section": "build"
+    },
+    {
+      "time": 8.672,
+      "frame": 260,
+      "bar": 5,
+      "beat": 3,
+      "kind": "hat",
+      "section": "build"
+    },
+    {
+      "time": 8.906,
+      "frame": 267,
+      "bar": 5,
+      "beat": 4,
+      "kind": "snare",
+      "section": "build"
+    },
+    {
+      "time": 8.906,
+      "frame": 267,
+      "bar": 5,
+      "beat": 4,
+      "kind": "hat",
+      "section": "build"
+    },
+    {
+      "time": 9.141,
+      "frame": 274,
+      "bar": 5,
+      "beat": 4,
+      "kind": "hat",
+      "section": "build"
+    },
+    {
+      "time": 9.375,
+      "frame": 281,
+      "bar": 6,
+      "beat": 1,
+      "kind": "kick",
+      "section": "build"
+    },
+    {
+      "time": 9.375,
+      "frame": 281,
+      "bar": 6,
+      "beat": 1,
+      "kind": "hat",
+      "section": "build"
+    },
+    {
+      "time": 9.609,
+      "frame": 288,
+      "bar": 6,
+      "beat": 1,
+      "kind": "hat",
+      "section": "build"
+    },
+    {
+      "time": 9.844,
+      "frame": 295,
+      "bar": 6,
+      "beat": 2,
+      "kind": "snare",
+      "section": "build"
+    },
+    {
+      "time": 9.844,
+      "frame": 295,
+      "bar": 6,
+      "beat": 2,
+      "kind": "hat",
+      "section": "build"
+    },
+    {
+      "time": 10.078,
+      "frame": 302,
+      "bar": 6,
+      "beat": 2,
+      "kind": "hat",
+      "section": "build"
+    },
+    {
+      "time": 10.313,
+      "frame": 309,
+      "bar": 6,
+      "beat": 3,
+      "kind": "kick",
+      "section": "build"
+    },
+    {
+      "time": 10.313,
+      "frame": 309,
+      "bar": 6,
+      "beat": 3,
+      "kind": "hat",
+      "section": "build"
+    },
+    {
+      "time": 10.547,
+      "frame": 316,
+      "bar": 6,
+      "beat": 3,
+      "kind": "hat",
+      "section": "build"
+    },
+    {
+      "time": 10.781,
+      "frame": 323,
+      "bar": 6,
+      "beat": 4,
+      "kind": "snare",
+      "section": "build"
+    },
+    {
+      "time": 10.781,
+      "frame": 323,
+      "bar": 6,
+      "beat": 4,
+      "kind": "hat",
+      "section": "build"
+    },
+    {
+      "time": 11.016,
+      "frame": 330,
+      "bar": 6,
+      "beat": 4,
+      "kind": "hat",
+      "section": "build"
+    },
+    {
+      "time": 11.25,
+      "frame": 338,
+      "bar": 7,
+      "beat": 1,
+      "kind": "kick",
+      "section": "build"
+    },
+    {
+      "time": 11.25,
+      "frame": 338,
+      "bar": 7,
+      "beat": 1,
+      "kind": "hat",
+      "section": "build"
+    },
+    {
+      "time": 11.484,
+      "frame": 345,
+      "bar": 7,
+      "beat": 1,
+      "kind": "hat",
+      "section": "build"
+    },
+    {
+      "time": 11.719,
+      "frame": 352,
+      "bar": 7,
+      "beat": 2,
+      "kind": "snare",
+      "section": "build"
+    },
+    {
+      "time": 11.719,
+      "frame": 352,
+      "bar": 7,
+      "beat": 2,
+      "kind": "hat",
+      "section": "build"
+    },
+    {
+      "time": 11.953,
+      "frame": 359,
+      "bar": 7,
+      "beat": 2,
+      "kind": "hat",
+      "section": "build"
+    },
+    {
+      "time": 12.188,
+      "frame": 366,
+      "bar": 7,
+      "beat": 3,
+      "kind": "kick",
+      "section": "build"
+    },
+    {
+      "time": 12.188,
+      "frame": 366,
+      "bar": 7,
+      "beat": 3,
+      "kind": "hat",
+      "section": "build"
+    },
+    {
+      "time": 12.422,
+      "frame": 373,
+      "bar": 7,
+      "beat": 3,
+      "kind": "hat",
+      "section": "build"
+    },
+    {
+      "time": 12.656,
+      "frame": 380,
+      "bar": 7,
+      "beat": 4,
+      "kind": "snare",
+      "section": "build"
+    },
+    {
+      "time": 12.656,
+      "frame": 380,
+      "bar": 7,
+      "beat": 4,
+      "kind": "hat",
+      "section": "build"
+    },
+    {
+      "time": 12.891,
+      "frame": 387,
+      "bar": 7,
+      "beat": 4,
+      "kind": "hat",
+      "section": "build"
+    },
+    {
+      "time": 13.125,
+      "frame": 394,
+      "bar": 8,
+      "beat": 1,
+      "kind": "kick",
+      "section": "build"
+    },
+    {
+      "time": 13.125,
+      "frame": 394,
+      "bar": 8,
+      "beat": 1,
+      "kind": "hat",
+      "section": "build"
+    },
+    {
+      "time": 13.359,
+      "frame": 401,
+      "bar": 8,
+      "beat": 1,
+      "kind": "hat",
+      "section": "build"
+    },
+    {
+      "time": 13.594,
+      "frame": 408,
+      "bar": 8,
+      "beat": 2,
+      "kind": "snare",
+      "section": "build"
+    },
+    {
+      "time": 13.594,
+      "frame": 408,
+      "bar": 8,
+      "beat": 2,
+      "kind": "hat",
+      "section": "build"
+    },
+    {
+      "time": 13.828,
+      "frame": 415,
+      "bar": 8,
+      "beat": 2,
+      "kind": "hat",
+      "section": "build"
+    },
+    {
+      "time": 14.063,
+      "frame": 422,
+      "bar": 8,
+      "beat": 3,
+      "kind": "kick",
+      "section": "build"
+    },
+    {
+      "time": 14.063,
+      "frame": 422,
+      "bar": 8,
+      "beat": 3,
+      "kind": "hat",
+      "section": "build"
+    },
+    {
+      "time": 14.297,
+      "frame": 429,
+      "bar": 8,
+      "beat": 3,
+      "kind": "hat",
+      "section": "build"
+    },
+    {
+      "time": 14.531,
+      "frame": 436,
+      "bar": 8,
+      "beat": 4,
+      "kind": "snare",
+      "section": "build"
+    },
+    {
+      "time": 14.531,
+      "frame": 436,
+      "bar": 8,
+      "beat": 4,
+      "kind": "hat",
+      "section": "build"
+    },
+    {
+      "time": 14.766,
+      "frame": 443,
+      "bar": 8,
+      "beat": 4,
+      "kind": "hat",
+      "section": "build"
+    },
+    {
+      "time": 15,
+      "frame": 450,
+      "bar": 9,
+      "beat": 1,
+      "kind": "kick",
+      "section": "drop"
+    },
+    {
+      "time": 15,
+      "frame": 450,
+      "bar": 9,
+      "beat": 1,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 15.234,
+      "frame": 457,
+      "bar": 9,
+      "beat": 1,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 15.469,
+      "frame": 464,
+      "bar": 9,
+      "beat": 2,
+      "kind": "snare",
+      "section": "drop"
+    },
+    {
+      "time": 15.469,
+      "frame": 464,
+      "bar": 9,
+      "beat": 2,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 15.703,
+      "frame": 471,
+      "bar": 9,
+      "beat": 2,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 15.938,
+      "frame": 478,
+      "bar": 9,
+      "beat": 3,
+      "kind": "kick",
+      "section": "drop"
+    },
+    {
+      "time": 15.938,
+      "frame": 478,
+      "bar": 9,
+      "beat": 3,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 16.172,
+      "frame": 485,
+      "bar": 9,
+      "beat": 3,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 16.406,
+      "frame": 492,
+      "bar": 9,
+      "beat": 4,
+      "kind": "snare",
+      "section": "drop"
+    },
+    {
+      "time": 16.406,
+      "frame": 492,
+      "bar": 9,
+      "beat": 4,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 16.641,
+      "frame": 499,
+      "bar": 9,
+      "beat": 4,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 16.875,
+      "frame": 506,
+      "bar": 10,
+      "beat": 1,
+      "kind": "kick",
+      "section": "drop"
+    },
+    {
+      "time": 16.875,
+      "frame": 506,
+      "bar": 10,
+      "beat": 1,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 17.109,
+      "frame": 513,
+      "bar": 10,
+      "beat": 1,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 17.344,
+      "frame": 520,
+      "bar": 10,
+      "beat": 2,
+      "kind": "snare",
+      "section": "drop"
+    },
+    {
+      "time": 17.344,
+      "frame": 520,
+      "bar": 10,
+      "beat": 2,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 17.578,
+      "frame": 527,
+      "bar": 10,
+      "beat": 2,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 17.813,
+      "frame": 534,
+      "bar": 10,
+      "beat": 3,
+      "kind": "kick",
+      "section": "drop"
+    },
+    {
+      "time": 17.813,
+      "frame": 534,
+      "bar": 10,
+      "beat": 3,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 18.047,
+      "frame": 541,
+      "bar": 10,
+      "beat": 3,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 18.281,
+      "frame": 548,
+      "bar": 10,
+      "beat": 4,
+      "kind": "snare",
+      "section": "drop"
+    },
+    {
+      "time": 18.281,
+      "frame": 548,
+      "bar": 10,
+      "beat": 4,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 18.516,
+      "frame": 555,
+      "bar": 10,
+      "beat": 4,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 18.75,
+      "frame": 563,
+      "bar": 11,
+      "beat": 1,
+      "kind": "kick",
+      "section": "drop"
+    },
+    {
+      "time": 18.75,
+      "frame": 563,
+      "bar": 11,
+      "beat": 1,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 18.984,
+      "frame": 570,
+      "bar": 11,
+      "beat": 1,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 19.219,
+      "frame": 577,
+      "bar": 11,
+      "beat": 2,
+      "kind": "snare",
+      "section": "drop"
+    },
+    {
+      "time": 19.219,
+      "frame": 577,
+      "bar": 11,
+      "beat": 2,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 19.453,
+      "frame": 584,
+      "bar": 11,
+      "beat": 2,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 19.688,
+      "frame": 591,
+      "bar": 11,
+      "beat": 3,
+      "kind": "kick",
+      "section": "drop"
+    },
+    {
+      "time": 19.688,
+      "frame": 591,
+      "bar": 11,
+      "beat": 3,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 19.922,
+      "frame": 598,
+      "bar": 11,
+      "beat": 3,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 20.156,
+      "frame": 605,
+      "bar": 11,
+      "beat": 4,
+      "kind": "snare",
+      "section": "drop"
+    },
+    {
+      "time": 20.156,
+      "frame": 605,
+      "bar": 11,
+      "beat": 4,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 20.391,
+      "frame": 612,
+      "bar": 11,
+      "beat": 4,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 20.625,
+      "frame": 619,
+      "bar": 12,
+      "beat": 1,
+      "kind": "kick",
+      "section": "drop"
+    },
+    {
+      "time": 20.625,
+      "frame": 619,
+      "bar": 12,
+      "beat": 1,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 20.859,
+      "frame": 626,
+      "bar": 12,
+      "beat": 1,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 21.094,
+      "frame": 633,
+      "bar": 12,
+      "beat": 2,
+      "kind": "snare",
+      "section": "drop"
+    },
+    {
+      "time": 21.094,
+      "frame": 633,
+      "bar": 12,
+      "beat": 2,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 21.328,
+      "frame": 640,
+      "bar": 12,
+      "beat": 2,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 21.563,
+      "frame": 647,
+      "bar": 12,
+      "beat": 3,
+      "kind": "kick",
+      "section": "drop"
+    },
+    {
+      "time": 21.563,
+      "frame": 647,
+      "bar": 12,
+      "beat": 3,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 21.797,
+      "frame": 654,
+      "bar": 12,
+      "beat": 3,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 22.031,
+      "frame": 661,
+      "bar": 12,
+      "beat": 4,
+      "kind": "snare",
+      "section": "drop"
+    },
+    {
+      "time": 22.031,
+      "frame": 661,
+      "bar": 12,
+      "beat": 4,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 22.266,
+      "frame": 668,
+      "bar": 12,
+      "beat": 4,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 22.5,
+      "frame": 675,
+      "bar": 13,
+      "beat": 1,
+      "kind": "kick",
+      "section": "drop"
+    },
+    {
+      "time": 22.5,
+      "frame": 675,
+      "bar": 13,
+      "beat": 1,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 22.734,
+      "frame": 682,
+      "bar": 13,
+      "beat": 1,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 22.969,
+      "frame": 689,
+      "bar": 13,
+      "beat": 2,
+      "kind": "snare",
+      "section": "drop"
+    },
+    {
+      "time": 22.969,
+      "frame": 689,
+      "bar": 13,
+      "beat": 2,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 23.203,
+      "frame": 696,
+      "bar": 13,
+      "beat": 2,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 23.438,
+      "frame": 703,
+      "bar": 13,
+      "beat": 3,
+      "kind": "kick",
+      "section": "drop"
+    },
+    {
+      "time": 23.438,
+      "frame": 703,
+      "bar": 13,
+      "beat": 3,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 23.672,
+      "frame": 710,
+      "bar": 13,
+      "beat": 3,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 23.906,
+      "frame": 717,
+      "bar": 13,
+      "beat": 4,
+      "kind": "snare",
+      "section": "drop"
+    },
+    {
+      "time": 23.906,
+      "frame": 717,
+      "bar": 13,
+      "beat": 4,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 24.141,
+      "frame": 724,
+      "bar": 13,
+      "beat": 4,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 24.375,
+      "frame": 731,
+      "bar": 14,
+      "beat": 1,
+      "kind": "kick",
+      "section": "drop"
+    },
+    {
+      "time": 24.375,
+      "frame": 731,
+      "bar": 14,
+      "beat": 1,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 24.609,
+      "frame": 738,
+      "bar": 14,
+      "beat": 1,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 24.844,
+      "frame": 745,
+      "bar": 14,
+      "beat": 2,
+      "kind": "snare",
+      "section": "drop"
+    },
+    {
+      "time": 24.844,
+      "frame": 745,
+      "bar": 14,
+      "beat": 2,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 25.078,
+      "frame": 752,
+      "bar": 14,
+      "beat": 2,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 25.313,
+      "frame": 759,
+      "bar": 14,
+      "beat": 3,
+      "kind": "kick",
+      "section": "drop"
+    },
+    {
+      "time": 25.313,
+      "frame": 759,
+      "bar": 14,
+      "beat": 3,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 25.547,
+      "frame": 766,
+      "bar": 14,
+      "beat": 3,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 25.781,
+      "frame": 773,
+      "bar": 14,
+      "beat": 4,
+      "kind": "snare",
+      "section": "drop"
+    },
+    {
+      "time": 25.781,
+      "frame": 773,
+      "bar": 14,
+      "beat": 4,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 26.016,
+      "frame": 780,
+      "bar": 14,
+      "beat": 4,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 26.25,
+      "frame": 788,
+      "bar": 15,
+      "beat": 1,
+      "kind": "kick",
+      "section": "drop"
+    },
+    {
+      "time": 26.25,
+      "frame": 788,
+      "bar": 15,
+      "beat": 1,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 26.484,
+      "frame": 795,
+      "bar": 15,
+      "beat": 1,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 26.719,
+      "frame": 802,
+      "bar": 15,
+      "beat": 2,
+      "kind": "snare",
+      "section": "drop"
+    },
+    {
+      "time": 26.719,
+      "frame": 802,
+      "bar": 15,
+      "beat": 2,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 26.953,
+      "frame": 809,
+      "bar": 15,
+      "beat": 2,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 27.188,
+      "frame": 816,
+      "bar": 15,
+      "beat": 3,
+      "kind": "kick",
+      "section": "drop"
+    },
+    {
+      "time": 27.188,
+      "frame": 816,
+      "bar": 15,
+      "beat": 3,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 27.422,
+      "frame": 823,
+      "bar": 15,
+      "beat": 3,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 27.656,
+      "frame": 830,
+      "bar": 15,
+      "beat": 4,
+      "kind": "snare",
+      "section": "drop"
+    },
+    {
+      "time": 27.656,
+      "frame": 830,
+      "bar": 15,
+      "beat": 4,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 27.891,
+      "frame": 837,
+      "bar": 15,
+      "beat": 4,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 28.125,
+      "frame": 844,
+      "bar": 16,
+      "beat": 1,
+      "kind": "kick",
+      "section": "drop"
+    },
+    {
+      "time": 28.125,
+      "frame": 844,
+      "bar": 16,
+      "beat": 1,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 28.359,
+      "frame": 851,
+      "bar": 16,
+      "beat": 1,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 28.594,
+      "frame": 858,
+      "bar": 16,
+      "beat": 2,
+      "kind": "snare",
+      "section": "drop"
+    },
+    {
+      "time": 28.594,
+      "frame": 858,
+      "bar": 16,
+      "beat": 2,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 28.828,
+      "frame": 865,
+      "bar": 16,
+      "beat": 2,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 29.063,
+      "frame": 872,
+      "bar": 16,
+      "beat": 3,
+      "kind": "kick",
+      "section": "drop"
+    },
+    {
+      "time": 29.063,
+      "frame": 872,
+      "bar": 16,
+      "beat": 3,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 29.297,
+      "frame": 879,
+      "bar": 16,
+      "beat": 3,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 29.531,
+      "frame": 886,
+      "bar": 16,
+      "beat": 4,
+      "kind": "snare",
+      "section": "drop"
+    },
+    {
+      "time": 29.531,
+      "frame": 886,
+      "bar": 16,
+      "beat": 4,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 29.766,
+      "frame": 893,
+      "bar": 16,
+      "beat": 4,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 30,
+      "frame": 900,
+      "bar": 17,
+      "beat": 1,
+      "kind": "kick",
+      "section": "drop"
+    },
+    {
+      "time": 30,
+      "frame": 900,
+      "bar": 17,
+      "beat": 1,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 30.234,
+      "frame": 907,
+      "bar": 17,
+      "beat": 1,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 30.469,
+      "frame": 914,
+      "bar": 17,
+      "beat": 2,
+      "kind": "snare",
+      "section": "drop"
+    },
+    {
+      "time": 30.469,
+      "frame": 914,
+      "bar": 17,
+      "beat": 2,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 30.703,
+      "frame": 921,
+      "bar": 17,
+      "beat": 2,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 30.938,
+      "frame": 928,
+      "bar": 17,
+      "beat": 3,
+      "kind": "kick",
+      "section": "drop"
+    },
+    {
+      "time": 30.938,
+      "frame": 928,
+      "bar": 17,
+      "beat": 3,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 31.172,
+      "frame": 935,
+      "bar": 17,
+      "beat": 3,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 31.406,
+      "frame": 942,
+      "bar": 17,
+      "beat": 4,
+      "kind": "snare",
+      "section": "drop"
+    },
+    {
+      "time": 31.406,
+      "frame": 942,
+      "bar": 17,
+      "beat": 4,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 31.641,
+      "frame": 949,
+      "bar": 17,
+      "beat": 4,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 31.875,
+      "frame": 956,
+      "bar": 18,
+      "beat": 1,
+      "kind": "kick",
+      "section": "drop"
+    },
+    {
+      "time": 31.875,
+      "frame": 956,
+      "bar": 18,
+      "beat": 1,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 32.109,
+      "frame": 963,
+      "bar": 18,
+      "beat": 1,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 32.344,
+      "frame": 970,
+      "bar": 18,
+      "beat": 2,
+      "kind": "snare",
+      "section": "drop"
+    },
+    {
+      "time": 32.344,
+      "frame": 970,
+      "bar": 18,
+      "beat": 2,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 32.578,
+      "frame": 977,
+      "bar": 18,
+      "beat": 2,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 32.813,
+      "frame": 984,
+      "bar": 18,
+      "beat": 3,
+      "kind": "kick",
+      "section": "drop"
+    },
+    {
+      "time": 32.813,
+      "frame": 984,
+      "bar": 18,
+      "beat": 3,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 33.047,
+      "frame": 991,
+      "bar": 18,
+      "beat": 3,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 33.281,
+      "frame": 998,
+      "bar": 18,
+      "beat": 4,
+      "kind": "snare",
+      "section": "drop"
+    },
+    {
+      "time": 33.281,
+      "frame": 998,
+      "bar": 18,
+      "beat": 4,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 33.516,
+      "frame": 1005,
+      "bar": 18,
+      "beat": 4,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 33.75,
+      "frame": 1013,
+      "bar": 19,
+      "beat": 1,
+      "kind": "kick",
+      "section": "drop"
+    },
+    {
+      "time": 33.75,
+      "frame": 1013,
+      "bar": 19,
+      "beat": 1,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 33.984,
+      "frame": 1020,
+      "bar": 19,
+      "beat": 1,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 34.219,
+      "frame": 1027,
+      "bar": 19,
+      "beat": 2,
+      "kind": "snare",
+      "section": "drop"
+    },
+    {
+      "time": 34.219,
+      "frame": 1027,
+      "bar": 19,
+      "beat": 2,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 34.453,
+      "frame": 1034,
+      "bar": 19,
+      "beat": 2,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 34.688,
+      "frame": 1041,
+      "bar": 19,
+      "beat": 3,
+      "kind": "kick",
+      "section": "drop"
+    },
+    {
+      "time": 34.688,
+      "frame": 1041,
+      "bar": 19,
+      "beat": 3,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 34.922,
+      "frame": 1048,
+      "bar": 19,
+      "beat": 3,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 35.156,
+      "frame": 1055,
+      "bar": 19,
+      "beat": 4,
+      "kind": "snare",
+      "section": "drop"
+    },
+    {
+      "time": 35.156,
+      "frame": 1055,
+      "bar": 19,
+      "beat": 4,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 35.391,
+      "frame": 1062,
+      "bar": 19,
+      "beat": 4,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 35.625,
+      "frame": 1069,
+      "bar": 20,
+      "beat": 1,
+      "kind": "kick",
+      "section": "drop"
+    },
+    {
+      "time": 35.625,
+      "frame": 1069,
+      "bar": 20,
+      "beat": 1,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 35.859,
+      "frame": 1076,
+      "bar": 20,
+      "beat": 1,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 36.094,
+      "frame": 1083,
+      "bar": 20,
+      "beat": 2,
+      "kind": "snare",
+      "section": "drop"
+    },
+    {
+      "time": 36.094,
+      "frame": 1083,
+      "bar": 20,
+      "beat": 2,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 36.328,
+      "frame": 1090,
+      "bar": 20,
+      "beat": 2,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 36.563,
+      "frame": 1097,
+      "bar": 20,
+      "beat": 3,
+      "kind": "kick",
+      "section": "drop"
+    },
+    {
+      "time": 36.563,
+      "frame": 1097,
+      "bar": 20,
+      "beat": 3,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 36.797,
+      "frame": 1104,
+      "bar": 20,
+      "beat": 3,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 37.031,
+      "frame": 1111,
+      "bar": 20,
+      "beat": 4,
+      "kind": "snare",
+      "section": "drop"
+    },
+    {
+      "time": 37.031,
+      "frame": 1111,
+      "bar": 20,
+      "beat": 4,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 37.266,
+      "frame": 1118,
+      "bar": 20,
+      "beat": 4,
+      "kind": "hat",
+      "section": "drop"
+    },
+    {
+      "time": 37.5,
+      "frame": 1125,
+      "bar": 21,
+      "beat": 1,
+      "kind": "kick",
+      "section": "outro"
+    },
+    {
+      "time": 37.969,
+      "frame": 1139,
+      "bar": 21,
+      "beat": 2,
+      "kind": "snare",
+      "section": "outro"
+    },
+    {
+      "time": 38.438,
+      "frame": 1153,
+      "bar": 21,
+      "beat": 3,
+      "kind": "kick",
+      "section": "outro"
+    },
+    {
+      "time": 38.906,
+      "frame": 1167,
+      "bar": 21,
+      "beat": 4,
+      "kind": "snare",
+      "section": "outro"
+    },
+    {
+      "time": 39.375,
+      "frame": 1181,
+      "bar": 22,
+      "beat": 1,
+      "kind": "kick",
+      "section": "outro"
+    },
+    {
+      "time": 39.844,
+      "frame": 1195,
+      "bar": 22,
+      "beat": 2,
+      "kind": "snare",
+      "section": "outro"
+    },
+    {
+      "time": 40.313,
+      "frame": 1209,
+      "bar": 22,
+      "beat": 3,
+      "kind": "kick",
+      "section": "outro"
+    },
+    {
+      "time": 40.781,
+      "frame": 1223,
+      "bar": 22,
+      "beat": 4,
+      "kind": "snare",
+      "section": "outro"
+    },
+    {
+      "time": 41.25,
+      "frame": 1238,
+      "bar": 23,
+      "beat": 1,
+      "kind": "kick",
+      "section": "outro"
+    },
+    {
+      "time": 41.719,
+      "frame": 1252,
+      "bar": 23,
+      "beat": 2,
+      "kind": "snare",
+      "section": "outro"
+    },
+    {
+      "time": 42.188,
+      "frame": 1266,
+      "bar": 23,
+      "beat": 3,
+      "kind": "kick",
+      "section": "outro"
+    },
+    {
+      "time": 42.656,
+      "frame": 1280,
+      "bar": 23,
+      "beat": 4,
+      "kind": "snare",
+      "section": "outro"
+    },
+    {
+      "time": 43.125,
+      "frame": 1294,
+      "bar": 24,
+      "beat": 1,
+      "kind": "kick",
+      "section": "outro"
+    },
+    {
+      "time": 43.594,
+      "frame": 1308,
+      "bar": 24,
+      "beat": 2,
+      "kind": "snare",
+      "section": "outro"
+    },
+    {
+      "time": 44.063,
+      "frame": 1322,
+      "bar": 24,
+      "beat": 3,
+      "kind": "kick",
+      "section": "outro"
+    },
+    {
+      "time": 44.531,
+      "frame": 1336,
+      "bar": 24,
+      "beat": 4,
+      "kind": "snare",
+      "section": "outro"
+    }
+  ]
+}

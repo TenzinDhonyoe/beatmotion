@@ -213,6 +213,22 @@ export function detectBpm(
     }
   }
 
+  // Tempo-octave correction. On backbeat patterns (kick on 1+3, snare on 2+4)
+  // the autocorrelation at lag = "1 kick period" can dominate the lag at
+  // "1 beat period" because kicks are louder than snares. The result: the
+  // analyzer reports half the actual BPM, the grid lands every other beat,
+  // and every animation is twice as wide as the music. Mitigate by checking
+  // if the autocorrelation at lag/2 (= 2× BPM) is meaningfully strong —
+  // if so, prefer the doubled BPM. The 0.55 threshold is tuned to flip on
+  // pop / hip-hop / EDM backbeats but leave true sub-100 BPM tracks alone
+  // (their lag/2 peaks tend to be weak because the music doesn't have a
+  // half-bar accent pattern).
+  const halfLag = Math.round(bestLag / 2);
+  if (halfLag >= minLag && halfLag < bestLag && ac[halfLag] >= bestVal * 0.55) {
+    bestLag = halfLag;
+    bestVal = ac[halfLag];
+  }
+
   // Parabolic interpolation around the best lag for sub-frame BPM resolution.
   let lagRefined = bestLag;
   if (bestLag > minLag && bestLag < maxLag) {
@@ -645,24 +661,37 @@ export function inferBarPhrase(
   }
 
   // ─── phrase length + phase (lag 16 vs 32) ────────────────────────────
-  function evalPhrase(L: 16 | 32): { phase: number; score: number } {
+  //
+  // Compare PER-SAMPLE averages rather than raw sums. Raw sums are biased
+  // toward shorter lags (lag 16 has 2× the terms of lag 32 in any signal,
+  // so its sum is naturally bigger). The per-sample average answers the
+  // right question: "does every Nth slot carry above-average strength?"
+  function evalPhrase(L: 16 | 32): { phase: number; score: number; avg: number } {
     let bestPhase = 0;
-    let bestScore = -Infinity;
+    let bestSum = -Infinity;
+    let bestCount = 0;
     for (let phase = 0; phase < L; phase++) {
       let s = 0;
+      let n = 0;
       for (let i = phase; i < strengths.length; i += L) {
         s += strengths[i];
+        n++;
       }
-      if (s > bestScore) {
-        bestScore = s;
+      if (s > bestSum) {
+        bestSum = s;
         bestPhase = phase;
+        bestCount = n;
       }
     }
-    return { phase: bestPhase, score: bestScore };
+    return {
+      phase: bestPhase,
+      score: bestSum,
+      avg: bestCount > 0 ? bestSum / bestCount : 0,
+    };
   }
   const p16 = evalPhrase(16);
   const p32 = evalPhrase(32);
-  const phraseLen: 16 | 32 = p32.score > p16.score * 1.1 ? 32 : 16;
+  const phraseLen: 16 | 32 = p32.avg > p16.avg * 1.1 ? 32 : 16;
   const phrasePhase = phraseLen === 32 ? p32.phase : p16.phase;
 
   // Confidence = how dominant the winning bar phase is over the others.
