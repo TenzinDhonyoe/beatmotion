@@ -1,20 +1,23 @@
 ---
-description: Sync Remotion animations to beats in an audio file. Auto-detects the audio file and composition state in the current project — no arguments needed.
+description: Sync Remotion animations to beats in an audio file. Auto-detects the audio file and composition state, runs the full analyze → scaffold (or analyze → sync) pipeline without stopping for confirmations.
 ---
 
-Run the beatmotion skill end-to-end against the current project, auto-detecting the audio file and the composition state. Do not ask the user for filenames or flow choice unless the directory state is genuinely ambiguous (see rules below).
+Run the beatmotion pipeline end-to-end against the current project. **Do not stop to ask "should I continue?" between steps.** Only ask the user when the directory state is genuinely ambiguous (multiple audio files, multiple Literal compositions) or when proposing sync edits one at a time.
 
-## Step 0 — verify the skill is installed
+## Step 0 — bootstrap the skill (silent unless something fails)
 
-Check for the beatmotion skill in this order:
-1. `./.claude/skills/beatmotion/SKILL.md` (project-level)
-2. `~/.claude/skills/beatmotion/SKILL.md` (user-level)
+Resolve the skill directory:
+1. If `./.claude/skills/beatmotion/SKILL.md` exists → `SKILL_DIR="$PWD/.claude/skills/beatmotion"`.
+2. Else if `$HOME/.claude/skills/beatmotion/SKILL.md` exists → `SKILL_DIR="$HOME/.claude/skills/beatmotion"`.
+3. Else: tell the user the skill is not installed and point them to `https://github.com/TenzinDhonyoe/beatmotion#install`. Stop.
 
-If neither exists, tell the user the skill is not installed and point them to `https://github.com/TenzinDhonyoe/beatmotion#install`. Stop.
+If `bun --version` fails: tell the user to install bun (`curl -fsSL https://bun.sh/install | bash`). Stop.
 
-## Step 1 — locate the audio file
+If `$SKILL_DIR/node_modules` is missing: run `(cd "$SKILL_DIR" && bun install)` silently. Don't ask first.
 
-Search for audio files in this order, taking the first non-empty hit:
+## Step 1 — locate the audio file (auto)
+
+Search for audio files in this order; take the first non-empty tier:
 1. Project root (`./`)
 2. `./public/`
 3. `./assets/`
@@ -22,50 +25,105 @@ Search for audio files in this order, taking the first non-empty hit:
 
 Extensions: `.mp3`, `.wav`, `.flac`, `.opus`, `.aac`, `.m4a`, `.ogg`.
 
-Branch:
-- **Exactly one match** → use it silently.
+Decision:
+- **Exactly one match** → use it. No question.
 - **Multiple matches in the same tier** → list them with sizes and ask which one.
-- **Zero matches anywhere** → tell the user to drop an audio file into the project (e.g. `./song.mp3`) and stop.
+- **Zero matches anywhere** → tell the user to drop an audio file into the project and stop.
 
-## Step 2 — detect composition state
+## Step 2 — classify composition state (auto)
 
-Look for a Remotion composition in `src/**/*.tsx`:
-- Files matching `Composition*.tsx`, OR
-- Any `.tsx` containing `import { Composition }` from `'remotion'` / `"remotion"`.
+Look for a Remotion composition: any `src/**/*.tsx` matching `Composition*.tsx` OR containing `import { Composition }` from `'remotion'` / `"remotion"`.
 
-For each candidate, classify it:
-- **Symbolic** — already references `beats[N].frame`, `drops[N].frame`, or imports a `*.beats.json` sidecar. Nothing to sync.
+For each candidate, classify:
+- **Symbolic** — already references `beats[N].frame`, `drops[N].frame`, or imports a `*.beats.json` sidecar.
 - **Literal** — contains literal frame numbers inside `interpolate(...)`, `spring({ delayInFrames: N })`, or `<Sequence from={N}>`.
 - **Skeleton** — exists but contains no `interpolate` / `spring` / `<Sequence from=>` calls (or the file is empty / a stub).
 
-Branch:
-- **No composition file at all, or only skeleton files** → **Scaffold flow**.
+Branch (no question unless explicitly listed):
+- **No composition file at all, OR only Skeleton files** → **Scaffold flow**.
 - **Exactly one Literal composition** → **Sync flow** against that file.
-- **Multiple Literal compositions** → list them and ask which one to sync.
-- **Only Symbolic compositions exist** → tell the user the composition is already symbolic; offer to re-analyze the audio (refresh the sidecar) or to scaffold a new composition alongside. Wait for their choice.
+- **Multiple Literal compositions** → ask which one to sync.
+- **Only Symbolic compositions exist** → tell the user the composition is already symbolic and offer to re-analyze (refresh the sidecar) or scaffold a new one. Wait for choice.
 
-## Step 3 — run the chosen flow via the beatmotion skill
+## Step 3 — run the full pipeline (no intermediate confirmation)
 
-Follow the skill's own bootstrap-and-run instructions in `SKILL.md` (run its Step 0 bootstrap to resolve `$SKILL_DIR` and install deps, then invoke the right sub-flow). Do not run `bun` commands by hand outside the skill.
+### Determine the Remotion FPS
 
-**Scaffold flow:**
-1. Analyze the audio → writes a `<audio>.beats.json` sidecar.
-2. Run `scaffold` to generate a starter `src/Composition.tsx` with beat-anchored `<Sequence>` blocks, drop emphasis, and a transitions library next to it.
-3. If `src/Root.tsx` exists, try to auto-wire the `<Composition>` registration; otherwise print the snippet for the user to paste.
+Grep the project for `<Composition fps={N}>`. If found, use that N. If not found, default to **30** without asking.
 
-**Sync flow:**
-1. Analyze the audio → writes a `<audio>.beats.json` sidecar.
-2. Run `sync` against the target `.tsx`. Walk the user through each proposed edit one at a time: show the literal frame, the suggested beat-relative expression, the delta in seconds, the rationale, and a **weak-match** flag where the closest beat is >0.5s away.
-3. Apply only approved edits. Add the `import beatsData from "./<audio>.beats.json"` line if not already present.
+### Scaffold flow (auto-detected audio, no existing comp)
 
-## Step 4 — tell the user what's next
+Run BOTH commands in sequence without stopping:
 
-After the flow completes, surface:
-1. `npx remotion preview` to scrub.
-2. `npx remotion render` when satisfied.
-3. They can patch the analysis in natural language: *"the drop is at 0:42, not 0:48"*, *"remove the beat at 1:15"*. That re-runs the Override flow.
+```bash
+# 1. Analyze (writes <audio-stem>.beats.json next to the audio file)
+bun run "$SKILL_DIR/bin/analyze.ts" "<absolute audio path>" --fps <fps>
 
-## Troubleshooting hooks
+# 2. Scaffold straight into src/Composition.tsx
+bun run "$SKILL_DIR/bin/scaffold.ts" "<audio-stem>.beats.json" \
+    --tsx src/Composition.tsx \
+    --comp BeatComp
+```
 
-- If the skill's Step 0 exits with `NEEDS_BUN`, tell the user: install bun via `curl -fsSL https://bun.sh/install | bash`, then retry. Stop.
-- If `audio-decode` fails on an MP3 with a `crc32` validation error, suggest converting to WAV (`afconvert -f WAVE -d LEI16 song.mp3 song.wav` on macOS, or `ffmpeg -i song.mp3 song.wav` cross-platform) and retry with the WAV. Note this is a known issue tracked in the roadmap.
+If `src/Composition.tsx` already exists: overwrite with `--force` if it's a previous scaffold output (contains `__BEATS_IMPORT__` substitution markers like `import beatsData` plus `dropClimax`), otherwise ask before clobbering user work.
+
+**MP3 decode failures are handled automatically by analyze.ts** — it auto-converts to a temp WAV using `afconvert` (macOS) or `ffmpeg` (cross-platform) and continues. You don't need to intervene unless analyze.ts itself exits non-zero, in which case relay the printed instructions.
+
+After both commands succeed, summarize in 4-6 lines what the sidecar reported (BPM + confidence, gridLocked, phrase count, drop times, sections), then print the registration snippet from scaffold's stderr verbatim. Do not ask "do you want to run sync next?" — the scaffold output is symbolic already.
+
+### Sync flow (existing Literal composition)
+
+Run analyze first, then sync. After sync runs, **walk through the proposed edits one at a time** — this is the only point in the pipeline where per-step user input is genuinely needed.
+
+```bash
+# 1. Analyze
+bun run "$SKILL_DIR/bin/analyze.ts" "<absolute audio path>" --fps <fps>
+
+# 2. Sync — emits JSON on stdout with proposed edits
+bun run "$SKILL_DIR/bin/sync.ts" "<target .tsx>" "<audio-stem>.beats.json"
+```
+
+Parse the JSON output. If `summary.total === 0`: tell the user nothing was retargeted and offer to switch to Scaffold flow. Otherwise, walk through `animations[]` in source order:
+
+For each animation, show:
+- File path + line:column
+- `original` → `proposed`
+- The `rationale` verbatim
+- For `weakMatch: true` entries, lean toward recommending "Skip"
+
+Options per edit: **Apply** / **Skip** / **Stop reviewing**.
+
+Apply approved edits with the Edit tool using the exact `original` string. If Edit returns "old_string not unique", expand context from the line/column reference until unique. Never use `replace_all: true`.
+
+After all edits applied: check `hasBeatsImport` from sync output. If `false`, insert
+```ts
+import beatsData from "<beatsImport from sync output>";
+const { beats, drops, sections } = beatsData;
+```
+after the last existing `import` line.
+
+## Step 4 — final summary (one block, no follow-up question)
+
+After the flow completes, tell the user in 3-5 lines:
+- What the pipeline did (analyzed → scaffolded / synced N edits)
+- Where the output is (file path)
+- The next concrete command they should run: `npx remotion preview` then `npx remotion render`
+- If `gridLocked: false`, mention briefly that the song has variable/uncertain tempo — the matcher still ran but without bar/phrase bonuses
+
+Do not ask "anything else?" or "want to try another flow?" — the user can invoke `/sync-beat` again or send a natural-language override (*"the drop is at 0:42"*) if they want to iterate.
+
+## Override flow (natural-language correction, not part of normal /sync-beat)
+
+If the user, AFTER running /sync-beat, says something like *"the drop is actually at 0:42"* or *"remove that beat near 1:15"*, translate the phrase into one of the supported override forms and run:
+
+```bash
+bun run "$SKILL_DIR/bin/override.ts" "<beats.json>" "<translated correction>"
+```
+
+Then re-run sync if a `.tsx` is present.
+
+## Failure modes you might hit
+
+- **MP3 auto-fallback failed (no afconvert / ffmpeg)** — analyze.ts will exit 1 with conversion instructions. Relay them and stop.
+- **bun install failed** — relay the error and stop. The skill needs its deps to run.
+- **Audio file is genuinely silent or unanalyzable** — analyze.ts will emit 0 beats, gridLocked: false. Tell the user, don't try to scaffold from it.

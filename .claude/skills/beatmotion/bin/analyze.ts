@@ -10,7 +10,8 @@
  *
  * Writes <audio-basename>.beats.json next to the audio file (or to --out).
  */
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, unlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import decode from "audio-decode";
 import {
@@ -304,17 +305,55 @@ async function main() {
     const msg = err instanceof Error ? err.message : String(err);
     const ext = audioPath.slice(audioPath.lastIndexOf(".")).toLowerCase();
     if (ext === ".mp3") {
-      console.error(
-        `\nerror: MP3 decode failed (${msg.split("\n")[0]}).\n` +
-          `Some real-world MP3s trip the bundled decoder. Convert to WAV and retry:\n` +
-          `  macOS:        afconvert -f WAVE -d LEI16 "${audioPath}" "${audioPath.replace(/\.mp3$/i, ".wav")}"\n` +
-          `  cross-platform: ffmpeg -i "${audioPath}" "${audioPath.replace(/\.mp3$/i, ".wav")}"\n` +
-          `Then: bun run bin/analyze.ts "${audioPath.replace(/\.mp3$/i, ".wav")}"`
+      // Auto-fallback: spawn afconvert (macOS) or ffmpeg (cross-platform) to
+      // re-encode the troublesome MP3 to a temp WAV that the bundled decoder
+      // handles cleanly. Removes the manual conversion step the README used
+      // to require — most users have one of these tools on PATH.
+      const tmpWav = join(
+        tmpdir(),
+        `beatmotion-${Date.now()}-${basename(audioPath).replace(/\.mp3$/i, ".wav")}`
       );
+      const candidates: Array<{ cmd: string; args: string[] }> = [
+        { cmd: "afconvert", args: ["-f", "WAVE", "-d", "LEI16", audioPath, tmpWav] },
+        { cmd: "ffmpeg", args: ["-y", "-v", "error", "-i", audioPath, tmpWav] },
+      ];
+      let converted = false;
+      for (const c of candidates) {
+        const which = Bun.which(c.cmd);
+        if (!which) continue;
+        console.error(`MP3 decode failed (${msg.split("\n")[0]}) — falling back to ${c.cmd}...`);
+        try {
+          const proc = Bun.spawn([c.cmd, ...c.args], {
+            stderr: "pipe",
+            stdout: "pipe",
+          });
+          const exit = await proc.exited;
+          if (exit !== 0) continue;
+          const wavBuf = await readFile(tmpWav);
+          decoded = await decode(new Uint8Array(wavBuf));
+          await unlink(tmpWav).catch(() => {});
+          converted = true;
+          console.error(`re-decoded from temp WAV via ${c.cmd}`);
+          break;
+        } catch {
+          await unlink(tmpWav).catch(() => {});
+          continue;
+        }
+      }
+      if (!converted) {
+        console.error(
+          `\nerror: MP3 decode failed (${msg.split("\n")[0]}).\n` +
+            `Neither afconvert nor ffmpeg is on PATH for the auto-fallback. Convert manually:\n` +
+            `  macOS:        afconvert -f WAVE -d LEI16 "${audioPath}" "${audioPath.replace(/\.mp3$/i, ".wav")}"\n` +
+            `  cross-platform: ffmpeg -i "${audioPath}" "${audioPath.replace(/\.mp3$/i, ".wav")}"\n` +
+            `Then: bun run bin/analyze.ts "${audioPath.replace(/\.mp3$/i, ".wav")}"`
+        );
+        process.exit(1);
+      }
     } else {
       console.error(`error: audio decode failed for ${audioPath}: ${msg}`);
+      process.exit(1);
     }
-    process.exit(1);
   }
   const { channelData, sampleRate } = decoded;
   const duration = channelData[0].length / sampleRate;
