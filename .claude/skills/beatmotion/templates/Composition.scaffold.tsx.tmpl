@@ -2,43 +2,41 @@ import {
   AbsoluteFill,
   Audio,
   Sequence,
+  spring,
   useCurrentFrame,
   useVideoConfig,__MEDIA_IMPORT_EXTRA__
 } from "remotion";
 import beatsData from "__BEATS_IMPORT__";
 import { createBeatHelpers } from "./useBeats";
 import {
-  beatFade,
-  dropClimax,
-  hatNudge,
-  kickPunch,
-  pickTransition,
-  pickTransitionPlan,
-  sectionSlide,
-  snareFlash,
+  accentLineWidth,
+  downbeatPulse,
+  dropImpact,
+  kineticLetter,
 } from "./transitions";
 __MEDIA_FILES_IMPORT__
 
 const helpers = createBeatHelpers(beatsData);
 
-// Compute the Sequence boundary list once per render. When the analyzer
-// locked a tempo grid, phrase boundaries (every 16 or 32 beats) make for
-// musically meaningful cuts — a 32-beat section becomes 2 Sequences with
-// a slide transition between them. Without a locked grid (rubato music,
-// low BPM confidence) we fall back to the old section-based layout so
-// nothing breaks on free-time tracks.
+// Restrained palette that cycles per phrase. Title/promo aesthetic: white
+// text on near-black with a single accent color drawing the eye.
+const ACCENT_COLORS = ["#6EE7FF", "#C6A0FF", "#FFB45C", "#FF6E8A"];
+
+// Pre-compute Sequence boundaries from phrases (if grid-locked) or sections.
+// One Sequence per phrase keeps the visual content stable for ~16 beats at
+// a time, so the eye isn't being asked to re-anchor every beat.
 const SEQUENCE_BOUNDARIES = (() => {
   if (helpers.gridLocked && helpers.phrases.length > 0) {
     return helpers.phrases.map((p, i) => ({
       key: `phrase-${i}`,
       startFrame: p.startFrame,
       endFrame: p.endFrame,
+      phraseIndex: i,
       sectionIndex: helpers.sections.findIndex(
         (s) =>
           s.start <= p.startFrame / helpers.fps &&
           p.startFrame / helpers.fps < s.end
       ),
-      kind: "phrase" as const,
     }));
   }
   return helpers.sections.map((section, i) => {
@@ -48,122 +46,112 @@ const SEQUENCE_BOUNDARIES = (() => {
       key: `section-${i}`,
       startFrame,
       endFrame,
+      phraseIndex: i,
       sectionIndex: i,
-      kind: "section" as const,
     };
   });
 })();
 
 export const __COMP_NAME__: React.FC = () => {
   return (
-    <AbsoluteFill
-      style={{
-        background: "black",
-        color: "white",
-        fontFamily: "system-ui, -apple-system, Helvetica, sans-serif",
-      }}
-    >
+    <AbsoluteFill style={{ overflow: "hidden", background: "#050507" }}>
       <Audio src="__AUDIO_SRC__" />
-      {SEQUENCE_BOUNDARIES.map((b) => {
-        const durationInFrames = Math.max(1, b.endFrame - b.startFrame);
-        return (
-          <Sequence
-            key={b.key}
-            from={b.startFrame}
-            durationInFrames={durationInFrames}
-          >
-            <SectionView
-              sectionIndex={Math.max(0, b.sectionIndex)}
-              sectionStartFrame={b.startFrame}
-            />
-          </Sequence>
-        );
-      })}
+
+      {/* Outer wrapper holds drop-impact camera shake + scale. */}
+      <DropCameraWrap>
+        <BackgroundLayer />
+        {SEQUENCE_BOUNDARIES.map((b) => {
+          const durationInFrames = Math.max(1, b.endFrame - b.startFrame);
+          return (
+            <Sequence
+              key={b.key}
+              from={b.startFrame}
+              durationInFrames={durationInFrames}
+            >
+              <PhraseView
+                phraseIndex={b.phraseIndex}
+                sectionIndex={Math.max(0, b.sectionIndex)}
+                phraseStartFrame={b.startFrame}
+              />
+            </Sequence>
+          );
+        })}
+      </DropCameraWrap>
+
+      {/* Flash + vignette overlays live OUTSIDE the camera-wrapped tree so
+          they don't inherit its scale/shake — they're fullscreen washes. */}
+      <DropFlashOverlay />
     </AbsoluteFill>
   );
 };
 
-const SectionView: React.FC<{
+const DropCameraWrap: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const frame = useCurrentFrame();
+  // Apply the nearest drop's camera shake + scale to everything inside.
+  // Only one drop is "active" at a time (within its ±30-frame window).
+  const drop = helpers.drops.find(
+    (d) => frame >= d.frame - 12 && frame <= d.frame + 30
+  );
+  const impact = drop ? dropImpact(frame, drop.frame, { intensity: drop.kind === "main_drop" ? 1 : 0.7 }) : null;
+  return (
+    <AbsoluteFill style={impact?.cameraStyle ?? {}}>
+      {/* anticipation vignette dims everything just before the hit. */}
+      {impact ? <AbsoluteFill style={{ pointerEvents: "none", ...impact.vignetteStyle }} /> : null}
+      {children}
+    </AbsoluteFill>
+  );
+};
+
+const DropFlashOverlay: React.FC = () => {
+  const frame = useCurrentFrame();
+  const drop = helpers.drops.find(
+    (d) => frame >= d.frame - 12 && frame <= d.frame + 30
+  );
+  if (!drop) return null;
+  const impact = dropImpact(frame, drop.frame, { intensity: drop.kind === "main_drop" ? 1 : 0.7 });
+  return <AbsoluteFill style={{ pointerEvents: "none", ...impact.flashStyle }} />;
+};
+
+const BackgroundLayer: React.FC = () => {
+  const frame = useCurrentFrame();
+  // Radial gradient that brightens 4% on each downbeat then decays.
+  // Subtle enough that the user perceives "breathing" without anything
+  // moving visibly — fills the no-motion gaps between phrase boundaries.
+  const lastDownbeat = (() => {
+    for (let i = helpers.beats.length - 1; i >= 0; i--) {
+      if (helpers.beats[i].downbeat && helpers.beats[i].frame <= frame) {
+        return helpers.beats[i].frame;
+      }
+    }
+    return null;
+  })();
+  const pulse = downbeatPulse(frame, lastDownbeat);
+  const bg = `radial-gradient(circle at 50% 45%, rgba(255,255,255,${(0.05 + pulse).toFixed(3)}) 0%, transparent 65%), #050507`;
+  return <AbsoluteFill style={{ background: bg }} />;
+};
+
+const PhraseView: React.FC<{
+  phraseIndex: number;
   sectionIndex: number;
-  sectionStartFrame: number;
-}> = ({ sectionIndex, sectionStartFrame }) => {
+  phraseStartFrame: number;
+}> = ({ phraseIndex, sectionIndex, phraseStartFrame }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const section = helpers.sections[sectionIndex];
+  const accentColor = ACCENT_COLORS[phraseIndex % ACCENT_COLORS.length];
 
-  const beatsInSection = helpers.beats.filter(
-    (b) => b.time >= section.start && b.time < section.end
-  );
-  const dropsInSection = helpers.drops.filter(
-    (d) => d.time >= section.start && d.time < section.end
-  );
+  // Reveal progress for the phrase: spring from 0 to 1 over the first
+  // ~30 frames of the phrase. All title content uses this as its master
+  // timing variable.
+  const localFrame = frame - phraseStartFrame;
+  const reveal = spring({
+    frame: Math.max(0, localFrame),
+    fps,
+    config: { damping: 18, stiffness: 80, mass: 0.9 },
+  });
 
-  // Find the most recent beat at or before this frame.
-  const activeBeatIdx = (() => {
-    let idx = -1;
-    for (let i = 0; i < beatsInSection.length; i++) {
-      if (beatsInSection[i].frame <= frame) idx = i;
-      else break;
-    }
-    return idx;
-  })();
-  const activeBeat = activeBeatIdx >= 0 ? beatsInSection[activeBeatIdx] : null;
-  const transition = activeBeat ? pickTransition(activeBeat.strength) : "cut";
-
-  // Find the most recent beat of each drum kind. Routing different drums to
-  // different visual subjects keeps the hero element from twitching on every
-  // hi-hat tap, and lets each percussion role land on its own visual gesture.
-  const findLastOfKind = (kind: string) => {
-    for (let i = beatsInSection.length - 1; i >= 0; i--) {
-      const b = beatsInSection[i];
-      if (b.frame > frame) continue;
-      if (b.kind === kind) return b;
-    }
-    return null;
-  };
-  const lastKick = findLastOfKind("kick");
-  const lastSnare = findLastOfKind("snare");
-  const lastHat = findLastOfKind("hat");
-
-  // Pick a transition PLAN for the hero element based on the active beat's
-  // musical role. `pickTransition` (legacy) is kept above for back-compat
-  // with older Composition.tsx files; new code uses `pickTransitionPlan`.
-  const plan = pickTransitionPlan(activeBeat, {});
-
-  // Kick → hero scale punch (composes with dropClimax's scale via CSS cascade).
-  const kickStyle = lastKick && plan.primary === "punch"
-    ? kickPunch(frame, lastKick.frame, plan.intensity ?? 0.05, 4)
-    : {};
-
-  // Snare → hero brightness flash (composes with dropClimax's filter).
-  const snareStyle = lastSnare && plan.primary === "flash"
-    ? snareFlash(frame, lastSnare.frame, plan.fadeFrames ?? 3, 0.5)
-    : {};
-
-  // Hat → corner-ornament nudge (kept tiny so 8th notes don't shake the hero).
-  const hatStyle = lastHat ? hatNudge(frame, lastHat.frame, 1, 2) : {};
-
-  // Find the next drop within this section (if any) for emphasis. Pull a
-  // window of ±16 frames so the anticipation phase of dropClimax has data
-  // to work with (it reaches back 6 frames before the drop).
-  const nextDrop = dropsInSection.find((d) => d.frame >= frame - 16);
-  // dropClimax returns {} when inactive — won't clobber slide / fade.
-  const dropStyle = nextDrop
-    ? dropClimax(frame, nextDrop.frame, { scale: 0.4, freezeFrames: 4, desaturate: true })
-    : {};
-
-  // Per-section slide direction. Seeded by the section's start frame so
-  // adjacent sections feel different, but a track with many sections won't
-  // cycle predictably every fourth section (the old `sectionIndex % 4`).
-  const slideHash = (sectionStartFrame * 2654435761) >>> 0;
-  const slideDirection = (["up", "left", "down", "right"] as const)[slideHash % 4];
-  const slideStyle = sectionSlide(frame, sectionStartFrame, fps, slideDirection, 80);
-
-  // Beat-strength-aware reveal: stronger beats animate with a longer fade ramp.
-  const fadeFrames = transition === "slide" ? 14 : transition === "fade" ? 8 : 1;
-  const fadeStyle = activeBeat
-    ? beatFade(frame, activeBeat.frame, fadeFrames)
-    : { opacity: 1 };
+  const title = section ? section.kind.toUpperCase() : "BEATMOTION";
+  const totalPhrases = SEQUENCE_BOUNDARIES.length;
 
   __MEDIA_RENDER_BLOCK__
 };

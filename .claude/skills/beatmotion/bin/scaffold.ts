@@ -173,85 +173,128 @@ async function main() {
       jsIdent(`media_${i}_${basename(abs, extname(abs))}`, `media_${i}`)
     );
     mediaFilesImport = lines.join("\n") + `\nconst mediaFiles = [${idents.join(", ")}];`;
-    // Nested AbsoluteFills isolate each transform/filter source so they
-    // don't collide under spread: slide (translate) on the outer, dropClimax
-    // (scale + filter) on the inner. Kick punch + snare flash compose onto
-    // the hero element; hi-hat nudges go to a small corner ornament so
-    // 8th-note hats don't shake the main image.
-    mediaRenderBlock = `return (
-    <AbsoluteFill style={{ ...slideStyle }}>
-      <AbsoluteFill
+    // Media branch: hero image with a subtle Ken Burns through each phrase,
+    // crossfading between images on phrase boundaries. The title sits as a
+    // small overlay below. Kept restrained — title/promo aesthetic, not
+    // music-video-busy.
+    mediaRenderBlock = `// Subtle Ken Burns: scale from 1.00 → 1.05 across the phrase.
+  const kenBurns = 1 + 0.05 * Math.min(1, localFrame / 240);
+  const imageIndex = phraseIndex % mediaFiles.length;
+  const titleWidth = accentLineWidth(frame, phraseStartFrame, fps, 280);
+  return (
+    <AbsoluteFill style={{ alignItems: "center", justifyContent: "center" }}>
+      <div
         style={{
-          alignItems: "center",
-          justifyContent: "center",
-          overflow: "visible",
-          ...dropStyle,
+          width: "82%",
+          height: "82%",
+          overflow: "hidden",
+          borderRadius: 4,
+          opacity: reveal,
+          transform: \`scale(\${kenBurns.toFixed(4)})\`,
         }}
       >
-        <div
-          style={{
-            ...fadeStyle,
-            ...kickStyle,
-            ...snareStyle,
-            overflow: "visible",
-          }}
-        >
-          <Img
-            src={mediaFiles[Math.max(0, activeBeatIdx) % mediaFiles.length]}
-            style={{ maxWidth: "85%", maxHeight: "85%", objectFit: "contain" }}
-          />
+        <Img
+          src={mediaFiles[imageIndex]}
+          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+        />
+      </div>
+      <div
+        style={{
+          position: "absolute",
+          left: 80,
+          bottom: 80,
+          color: "white",
+          fontFamily: "Inter, system-ui, -apple-system, Helvetica, sans-serif",
+        }}
+      >
+        <div style={{ display: "flex", gap: 2, fontSize: 64, fontWeight: 800, letterSpacing: -2 }}>
+          {title.split("").map((ch, i) => {
+            const style = kineticLetter(i, reveal, title.length);
+            return (
+              <span key={i} style={{ display: "inline-block", ...style }}>
+                {ch === " " ? "\\u00A0" : ch}
+              </span>
+            );
+          })}
         </div>
         <div
           style={{
-            position: "absolute",
-            bottom: 24,
-            right: 24,
-            width: 10,
-            height: 10,
-            borderRadius: "50%",
-            background: "rgba(255,255,255,0.4)",
-            ...hatStyle,
+            width: \`\${titleWidth}px\`,
+            height: 2,
+            background: accentColor,
+            marginTop: 16,
           }}
         />
-      </AbsoluteFill>
+        <div
+          style={{
+            marginTop: 20,
+            fontSize: 13,
+            letterSpacing: 4,
+            opacity: 0.55 * reveal,
+            fontWeight: 500,
+          }}
+        >
+          {String(phraseIndex + 1).padStart(2, "0")} / {String(totalPhrases).padStart(2, "0")}
+        </div>
+      </div>
     </AbsoluteFill>
   );`;
   } else {
     mediaImportExtra = "";
     mediaFilesImport = "";
-    mediaRenderBlock = `return (
-    <AbsoluteFill style={{ ...slideStyle }}>
-      <AbsoluteFill
+    // Text-only branch: centered title with letter-stagger reveal, animated
+    // accent line underneath, small phrase counter below. The drop camera
+    // shake + flash + scale are applied at the wrapper level (see template).
+    mediaRenderBlock = `const titleWidth = accentLineWidth(frame, phraseStartFrame, fps, 320);
+  return (
+    <AbsoluteFill
+      style={{
+        alignItems: "center",
+        justifyContent: "center",
+        flexDirection: "column",
+        fontFamily: "Inter, system-ui, -apple-system, Helvetica, sans-serif",
+        color: "white",
+      }}
+    >
+      <div
         style={{
-          alignItems: "center",
-          justifyContent: "center",
-          overflow: "visible",
-          ...dropStyle,
+          display: "flex",
+          gap: "0.02em",
+          fontSize: 140,
+          fontWeight: 800,
+          letterSpacing: -6,
+          lineHeight: 1,
+          textTransform: "uppercase",
         }}
       >
-        <div
-          style={{
-            fontSize: 96,
-            fontWeight: 700,
-            letterSpacing: -3,
-            ...fadeStyle,
-            ...kickStyle,
-            ...snareStyle,
-          }}
-        >
-          {section.kind.toUpperCase()}
-        </div>
-        <div
-          style={{
-            marginTop: 24,
-            fontSize: 28,
-            opacity: 0.6,
-            ...hatStyle,
-          }}
-        >
-          beat {Math.max(0, activeBeatIdx) + 1} / {beatsInSection.length}
-        </div>
-      </AbsoluteFill>
+        {title.split("").map((ch, i) => {
+          const style = kineticLetter(i, reveal, title.length);
+          return (
+            <span key={i} style={{ display: "inline-block", ...style }}>
+              {ch === " " ? "\\u00A0" : ch}
+            </span>
+          );
+        })}
+      </div>
+      <div
+        style={{
+          width: \`\${titleWidth}px\`,
+          height: 2,
+          background: accentColor,
+          marginTop: 28,
+        }}
+      />
+      <div
+        style={{
+          marginTop: 36,
+          fontSize: 14,
+          letterSpacing: 6,
+          opacity: 0.45 * reveal,
+          fontWeight: 500,
+        }}
+      >
+        {String(phraseIndex + 1).padStart(2, "0")} / {String(totalPhrases).padStart(2, "0")}
+      </div>
     </AbsoluteFill>
   );`;
   }

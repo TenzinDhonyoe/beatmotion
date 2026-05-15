@@ -317,3 +317,179 @@ export function pickTransitionPlan(
     default:      return { primary: "fade", fadeFrames: Math.max(2, Math.round(8 * (beat.strength ?? 0))) };
   }
 }
+
+// ───────────────────────────────────────────────────────────────────────
+// Motion-graphics-grade primitives. These replace the "react on every beat"
+// pattern with structural choreography — anticipation, impact, settle.
+// Use these for title / promo scaffolds; the older per-beat helpers above
+// are kept for back-compat but tend to produce twitchy results on real
+// music because they fire on every detected hit.
+// ───────────────────────────────────────────────────────────────────────
+
+export type DropImpactStyles = {
+  /** Camera shake + scale, spread onto the OUTER element (wraps everything). */
+  cameraStyle: Style;
+  /** Full-screen white flash, spread onto an AbsoluteFill child with pointer-events: none. */
+  flashStyle: Style;
+  /** Background dim for the anticipation window. */
+  vignetteStyle: Style;
+};
+
+/**
+ * Multi-stage drop choreography: 12-frame anticipation dip → 4-frame
+ * camera-shake + flash + scale impact → 26-frame ease-out settle with
+ * overshoot decay. Designed to FEEL like a drop, not just register one.
+ *
+ * Spread `cameraStyle` onto the element that wraps your composition (the
+ * outer AbsoluteFill). Spread `flashStyle` onto a pointerEvents:none child
+ * that fills the frame. The vignette is optional — spread onto a separate
+ * full-frame backdrop if you want the anticipation darkening.
+ *
+ * Reference: this is the "explosive drop" pattern used in title sequences
+ * and promo videos — the impact reads cleanly across drum-and-bass, EDM,
+ * and trap drops alike.
+ */
+export function dropImpact(
+  frame: number,
+  dropFrame: number,
+  opts: {
+    intensity?: number;       // 0..1 scaling on the whole effect
+    anticipationFrames?: number;
+    hitFrames?: number;
+    settleFrames?: number;
+    shakeAmplitude?: number;  // px, peak shake during hit
+    scalePeak?: number;       // peak extra scale during hit (0.15 = +15%)
+    flashStrength?: number;   // 0..1, peak opacity of white flash
+  } = {}
+): DropImpactStyles {
+  const intensity = opts.intensity ?? 1;
+  const anticipationFrames = opts.anticipationFrames ?? 12;
+  const hitFrames = opts.hitFrames ?? 4;
+  const settleFrames = opts.settleFrames ?? 26;
+  const shakeAmp = opts.shakeAmplitude ?? 6;
+  const scalePeak = opts.scalePeak ?? 0.15;
+  const flashStrength = opts.flashStrength ?? 0.45;
+
+  const d = frame - dropFrame;
+  const empty: DropImpactStyles = {
+    cameraStyle: {},
+    flashStyle: { background: "rgba(255,255,255,0)" },
+    vignetteStyle: { background: "rgba(0,0,0,0)" },
+  };
+
+  // Phase 1 — anticipation: subtle inverse zoom + vignette darkening.
+  if (d >= -anticipationFrames && d < 0) {
+    const t = (d + anticipationFrames) / anticipationFrames; // 0 → 1 approaching impact
+    return {
+      cameraStyle: { transform: `scale(${(1 - 0.025 * intensity * t).toFixed(4)})` },
+      flashStyle: { background: "rgba(255,255,255,0)" },
+      vignetteStyle: { background: `rgba(0,0,0,${(0.08 * t * intensity).toFixed(3)})` },
+    };
+  }
+
+  // Phase 2 — impact: scale punch + camera shake + white flash.
+  if (d >= 0 && d < hitFrames) {
+    const decay = 1 - d / hitFrames;
+    const shake = shakeAmp * intensity * decay;
+    // Pseudo-random shake derived from frame index — deterministic per frame.
+    const shakeX = Math.sin(d * 7.3) * shake;
+    const shakeY = Math.cos(d * 5.1) * shake;
+    const rotate = Math.sin(d * 11.0) * 0.6 * intensity * decay;
+    const scale = 1 + scalePeak * intensity;
+    return {
+      cameraStyle: {
+        transform: `translate(${shakeX.toFixed(2)}px, ${shakeY.toFixed(2)}px) rotate(${rotate.toFixed(3)}deg) scale(${scale.toFixed(4)})`,
+      },
+      flashStyle: {
+        background: `rgba(255,255,255,${(flashStrength * intensity * decay).toFixed(3)})`,
+      },
+      vignetteStyle: { background: "rgba(0,0,0,0)" },
+    };
+  }
+
+  // Phase 3 — settle: ease-out cubic from scalePeak back to 1, no shake.
+  if (d >= hitFrames && d < hitFrames + settleFrames) {
+    const t = (d - hitFrames) / settleFrames;
+    const ease = 1 - Math.pow(1 - t, 3);
+    const residual = scalePeak * intensity * (1 - ease);
+    return {
+      cameraStyle: { transform: `scale(${(1 + residual).toFixed(4)})` },
+      flashStyle: { background: "rgba(255,255,255,0)" },
+      vignetteStyle: { background: "rgba(0,0,0,0)" },
+    };
+  }
+
+  return empty;
+}
+
+/**
+ * Kinetic-typography letter reveal. For each character index, returns the
+ * style at the current `revealProgress` (0..1) using a staggered offset
+ * per letter. Letters slide up from 40px below with opacity fade-in.
+ *
+ *   text.split("").map((c, i) => {
+ *     const style = kineticLetter(i, revealProgress, text.length);
+ *     return <span style={{display: "inline-block", ...style}}>{c}</span>;
+ *   })
+ */
+export function kineticLetter(
+  charIndex: number,
+  revealProgress: number,
+  totalChars: number,
+  opts: { staggerFrac?: number; travelPx?: number } = {}
+): Style {
+  const staggerFrac = opts.staggerFrac ?? 0.5; // each letter starts 50% into the previous one
+  const travelPx = opts.travelPx ?? 40;
+  // Span the reveal across the full progress range with overlapping windows.
+  const perLetter = 1 / Math.max(1, totalChars * staggerFrac);
+  const start = charIndex * perLetter * staggerFrac;
+  const t = Math.max(0, Math.min(1, (revealProgress - start) / Math.max(0.001, perLetter)));
+  // Ease-out cubic for the slide and opacity.
+  const ease = 1 - Math.pow(1 - t, 3);
+  return {
+    transform: `translateY(${((1 - ease) * travelPx).toFixed(2)}px)`,
+    opacity: ease.toFixed(3),
+  };
+}
+
+/**
+ * Width of an animated accent line, spring-easing from 0 to maxPx over
+ * the first `holdFrames` of a phrase. Use under titles to visually
+ * underline the section reveal.
+ */
+export function accentLineWidth(
+  frame: number,
+  startFrame: number,
+  fps: number,
+  maxPx: number = 280,
+  delayFrames: number = 8
+): number {
+  const local = frame - startFrame - delayFrames;
+  if (local < 0) return 0;
+  const t = spring({
+    frame: local,
+    fps,
+    config: { damping: 16, stiffness: 110, mass: 0.9 },
+  });
+  return Math.max(0, Math.min(maxPx, maxPx * t));
+}
+
+/**
+ * Subtle background pulse at downbeats — radial-gradient brightness ramps
+ * up briefly when a downbeat fires, then decays over 8 frames. Used by
+ * BackgroundLayer in the title scaffold to give the impression that the
+ * background is "breathing" with the music without anything visible
+ * actually moving.
+ */
+export function downbeatPulse(
+  frame: number,
+  lastDownbeatFrame: number | null,
+  opts: { decayFrames?: number; peak?: number } = {}
+): number {
+  if (lastDownbeatFrame === null || frame < lastDownbeatFrame) return 0;
+  const decayFrames = opts.decayFrames ?? 8;
+  const peak = opts.peak ?? 0.04;
+  const d = frame - lastDownbeatFrame;
+  if (d > decayFrames) return 0;
+  return peak * (1 - d / decayFrames);
+}
