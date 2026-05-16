@@ -33,6 +33,14 @@ import {
   type GridSnappedPeak,
   type TempoSegment,
 } from "./dsp.ts";
+import { spectrogramAtFps } from "./fft.ts";
+import { computeFpsSpectralFeatures, roundCurve } from "./spectral.ts";
+import {
+  bandEnvelopesAtFps,
+  computeEnvelopeBundle,
+  computeIntensityBundle,
+} from "./envelopes.ts";
+import { aggregateFeatures, classify } from "./classify.ts";
 
 type Args = {
   audio: string;
@@ -709,6 +717,49 @@ async function main() {
   const { drops, sections } = detectDropsAndSections(times, energy, args.fps, bandedRms);
   console.error(`found ${drops.length} drops, ${sections.length} sections`);
 
+  // ─── Phase 5: deep spectral analysis ───
+  //
+  // FFT-based features computed per video frame so templates can index
+  // continuous curves with array[currentFrame]. Drives "audial-visual
+  // synchronous" motion in the new pro-grade scaffold template.
+  const totalVideoFrames = Math.round(duration * args.fps);
+  console.error(`computing FFT spectrogram at ${args.fps} fps...`);
+  const FFT_SIZE = 2048;
+  const spectrogram = spectrogramAtFps(mono, sampleRate, args.fps, FFT_SIZE, totalVideoFrames);
+  console.error(`computing spectral features (centroid / flux / flatness / rolloff)...`);
+  const spectralRaw = computeFpsSpectralFeatures(spectrogram, sampleRate, FFT_SIZE, args.fps);
+  console.error(`computing per-band FPS envelopes...`);
+  const fpsBandEnvelopes = bandEnvelopesAtFps(banded, sampleRate, args.fps, totalVideoFrames, 20);
+  const envelopeBundle = computeEnvelopeBundle(fpsBandEnvelopes, args.fps);
+  const intensityBundle = computeIntensityBundle(
+    fpsBandEnvelopes,
+    spectralRaw.flux,
+    spectralRaw.centroid,
+    beats.map((b) => b.frame),
+    totalVideoFrames,
+    args.fps
+  );
+  // Classify the song into a coarse genre + axis labels.
+  const aggregateFs = aggregateFeatures({
+    bpm: effectiveBpm,
+    bpmConfidence: effectiveConfidence,
+    numTempoSegments: Math.max(1, tempoSegments.length),
+    durationSec: duration,
+    beatFrames: beats.map((b) => b.frame),
+    fps: args.fps,
+    sampleRate,
+    subBassEnvelope: envelopeBundle.subBass,
+    totalEnvelope: envelopeBundle.total,
+    centroidHz: spectralRaw.centroid,
+    fluxRaw: spectralRaw.flux,
+    flatness: spectralRaw.flatness,
+    energy: intensityBundle.energy,
+  });
+  const classification = classify(aggregateFs);
+  console.error(
+    `classified: ${classification.genre} (${(classification.confidence * 100).toFixed(0)}%) | ${classification.bpmClass} / ${classification.subBassClass} / ${classification.brightClass} / ${classification.grooveClass} / ${classification.intensityProfile}`
+  );
+
   const out = {
     audio: basename(audioPath),
     duration,
@@ -723,16 +774,42 @@ async function main() {
     gridPhaseFrames: Math.round(gridPhaseFrames * 1000) / 1000,
     tempoSegments,
     phrases,
+    classification,
+    spectral: {
+      fps: args.fps,
+      centroid: roundCurve(spectralRaw.centroid, 1),    // Hz, integer precision is enough
+      spread: roundCurve(spectralRaw.spread, 1),
+      rolloff: roundCurve(spectralRaw.rolloff, 1),
+      flux: roundCurve(spectralRaw.flux, 4),
+      flatness: roundCurve(spectralRaw.flatness, 4),
+    },
+    envelopes: {
+      fps: envelopeBundle.fps,
+      total: roundCurve(envelopeBundle.total, 4),
+      subBass: roundCurve(envelopeBundle.subBass, 4),
+      lowBody: roundCurve(envelopeBundle.lowBody, 4),
+      midBody: roundCurve(envelopeBundle.midBody, 4),
+      midBright: roundCurve(envelopeBundle.midBright, 4),
+      hiAir: roundCurve(envelopeBundle.hiAir, 4),
+    },
+    intensity: {
+      fps: intensityBundle.fps,
+      energy: roundCurve(intensityBundle.energy, 4),
+      intensity: roundCurve(intensityBundle.intensity, 4),
+      tension: roundCurve(intensityBundle.tension, 4),
+      density: roundCurve(intensityBundle.density, 4),
+    },
     beats,
     drops,
     sections,
     overrides: [] as Array<{ kind: string; time: number; note?: string; action?: string }>,
     analyzer: {
-      version: "0.5.0-multi-tempo",
+      version: "0.6.0-spectral",
       odfRate: args.odfRate,
       minBpm: args.minBpm,
       maxBpm: args.maxBpm,
       delta: args.delta,
+      fftSize: FFT_SIZE,
       bandFreqs: DEFAULT_BANDS.map((b) => [b.lo, b.hi]),
       gridToleranceMs: 80,
       gridConfidenceFloor: GRID_CONFIDENCE_FLOOR,

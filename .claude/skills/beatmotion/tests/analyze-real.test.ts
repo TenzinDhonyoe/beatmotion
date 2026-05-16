@@ -58,6 +58,36 @@ describe("analyze on mock real-music fixture", () => {
       // a brightness-fall-edge detector that catches the moment the riser
       // cuts out. For now we just verify at least one drop is reported.
       expect(beats.drops.length).toBeGreaterThanOrEqual(1);
+
+      // ─── Phase 5 sidecar fields ───
+      expect(beats.analyzer.version).toBe("0.6.0-spectral");
+      const expectedFrames = Math.round(beats.duration * beats.fps);
+      // Allow ±2 frames slack — duration float rounding.
+      const checkLen = (arr: number[]) => {
+        expect(arr.length).toBeGreaterThanOrEqual(expectedFrames - 2);
+        expect(arr.length).toBeLessThanOrEqual(expectedFrames + 2);
+      };
+      expect(beats.spectral).toBeDefined();
+      checkLen(beats.spectral.centroid);
+      checkLen(beats.spectral.flux);
+      checkLen(beats.spectral.flatness);
+      checkLen(beats.spectral.rolloff);
+      checkLen(beats.spectral.spread);
+      expect(beats.envelopes).toBeDefined();
+      checkLen(beats.envelopes.total);
+      checkLen(beats.envelopes.subBass);
+      checkLen(beats.envelopes.hiAir);
+      expect(beats.intensity).toBeDefined();
+      checkLen(beats.intensity.energy);
+      checkLen(beats.intensity.tension);
+      checkLen(beats.intensity.density);
+      expect(beats.classification).toBeDefined();
+      expect(typeof beats.classification.genre).toBe("string");
+      expect(typeof beats.classification.bpmClass).toBe("string");
+      // Energy at a frame near the drop should be high (track is loud there).
+      const dropFrame = Math.round(15 * beats.fps); // truth drop time ~15s for mock fixture
+      const dropEnergy = beats.intensity.energy[Math.min(dropFrame, beats.intensity.energy.length - 1)];
+      expect(dropEnergy).toBeGreaterThan(0.3);
     });
   });
 });

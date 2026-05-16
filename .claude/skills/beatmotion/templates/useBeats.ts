@@ -19,21 +19,67 @@
  *   const beats = useBeats(beatsData);
  */
 
+export type BeatKind = "kick" | "snare" | "hat" | "other";
+
 export type Beat = {
   time: number;
   frame: number;
   strength: number;
   // Optional musical-structure fields populated by Phase 2+ analyzer.
   // Absent on legacy sidecars — helpers degrade gracefully.
-  kind?: "kick" | "snare" | "hat" | "other";
-  barPos?: 1 | 2 | 3 | 4;
+  // Note: `kind` is typed `string` (not the literal union) so that values
+  // imported from JSON sidecars assign cleanly — TS narrows the literal
+  // union away on JSON import. Helpers still compare against the literal
+  // values "kick" / "snare" / "hat" / "other" at runtime.
+  kind?: string;
+  barPos?: number;
   phrasePos?: number;
   downbeat?: boolean;
   synthetic?: boolean;
   manualOverride?: boolean;
+  segment?: number;
+  bandEnergies?: number[];
+  attackBacktrackMs?: number;
 };
 export type Drop = { time: number; frame: number; kind: string };
 export type Section = { start: number; end: number; kind: string };
+
+export type Classification = {
+  genre: string;
+  bpmClass: string;
+  subBassClass: string;
+  brightClass: string;
+  grooveClass: string;
+  intensityProfile: string;
+  confidence: number;
+};
+
+export type SpectralBundle = {
+  fps: number;
+  centroid: number[];
+  spread: number[];
+  rolloff: number[];
+  flux: number[];
+  flatness: number[];
+};
+
+export type EnvelopesBundle = {
+  fps: number;
+  total: number[];
+  subBass: number[];
+  lowBody: number[];
+  midBody: number[];
+  midBright: number[];
+  hiAir: number[];
+};
+
+export type IntensityBundle = {
+  fps: number;
+  energy: number[];
+  intensity: number[];
+  tension: number[];
+  density: number[];
+};
 
 export type BeatsData = {
   audio: string;
@@ -47,6 +93,11 @@ export type BeatsData = {
   // Phase 3 additions (optional).
   gridLocked?: boolean;
   phrases?: Array<{ startBeat: number; endBeat: number; startFrame: number; endFrame: number }>;
+  // Phase 5 additions (optional).
+  classification?: Classification;
+  spectral?: SpectralBundle;
+  envelopes?: EnvelopesBundle;
+  intensity?: IntensityBundle;
 };
 
 export type BestBeatOpts = {
@@ -117,6 +168,28 @@ export type BeatHelpers = {
 
   /** The main_drop entry, if one exists. */
   mainDrop: () => Drop | null;
+
+  // ─── Phase 5: continuous driver lookups (graceful fallback to 0) ───
+  /** Normalized smoothed energy curve, 0..1. Slow-changing "is the track loud right now". */
+  energyAt: (frame: number) => number;
+  /** Long-smoothed intensity, 0..1. For atmospheric drivers that shouldn't twitch. */
+  intensityAt: (frame: number) => number;
+  /** Tension curve (flux + centroid derivative), 0..1. For anticipation effects. */
+  tensionAt: (frame: number) => number;
+  /** Onset density curve, 0..1. For "how busy is the rhythm". */
+  densityAt: (frame: number) => number;
+  /** Sub-bass envelope, 0..1. For bass-driven glow / scale. */
+  subBassAt: (frame: number) => number;
+  /** Hi-air envelope, 0..1. For shimmer / sparkle / hi-band particles. */
+  hiAirAt: (frame: number) => number;
+  /** Spectral centroid normalized to [0..1] against Nyquist. For color / brightness drivers. */
+  centroidAt: (frame: number) => number;
+  /** Raw FPS-rate spectral flux at this frame. For chromatic aberration / transitions. */
+  fluxAt: (frame: number) => number;
+  /** Spectral flatness 0..1. Tonal vs noisy. */
+  flatnessAt: (frame: number) => number;
+  /** Classification object (genre + axis labels). undefined on legacy sidecars. */
+  classification?: Classification;
 };
 
 export function createBeatHelpers(data: BeatsData): BeatHelpers {
@@ -216,6 +289,39 @@ export function createBeatHelpers(data: BeatsData): BeatHelpers {
 
   const mainDrop = (): Drop | null => drops.find((d) => d.kind === "main_drop") ?? null;
 
+  // Phase 5 continuous drivers. `array[frame]` lookups with bounds clamping.
+  // Returns 0 on legacy sidecars (or undefined frames) so templates degrade
+  // safely without conditional checks at every callsite.
+  const safeAt = (arr: number[] | undefined, frame: number): number => {
+    if (!arr || arr.length === 0) return 0;
+    const i = Math.max(0, Math.min(arr.length - 1, Math.floor(frame)));
+    return arr[i] ?? 0;
+  };
+  // Centroid normalized to Nyquist so callers get a stable 0..1 regardless of
+  // sample rate. 22kHz Nyquist (44.1k sr) divides by 22050; 24kHz Nyquist by
+  // 24000.
+  const nyquist = 22050; // pessimistic default; real Nyquist depends on song sr
+  const centroidAt = (frame: number): number => {
+    const hz = safeAt(data.spectral?.centroid, frame);
+    return Math.max(0, Math.min(1, hz / nyquist));
+  };
+  const energyAt = (frame: number): number => safeAt(data.intensity?.energy, frame);
+  const intensityAt = (frame: number): number => safeAt(data.intensity?.intensity, frame);
+  const tensionAt = (frame: number): number => safeAt(data.intensity?.tension, frame);
+  const densityAt = (frame: number): number => safeAt(data.intensity?.density, frame);
+  const subBassAt = (frame: number): number => safeAt(data.envelopes?.subBass, frame);
+  const hiAirAt = (frame: number): number => safeAt(data.envelopes?.hiAir, frame);
+  const fluxAt = (frame: number): number => {
+    // Normalize raw flux against its observed maximum across the song.
+    const arr = data.spectral?.flux;
+    if (!arr || arr.length === 0) return 0;
+    let max = 0;
+    for (const v of arr) if (v > max) max = v;
+    if (max <= 0) return 0;
+    return safeAt(arr, frame) / max;
+  };
+  const flatnessAt = (frame: number): number => safeAt(data.spectral?.flatness, frame);
+
   return {
     raw: data,
     bpm: data.bpm,
@@ -235,6 +341,16 @@ export function createBeatHelpers(data: BeatsData): BeatHelpers {
     isOnDrop,
     sectionAt,
     mainDrop,
+    energyAt,
+    intensityAt,
+    tensionAt,
+    densityAt,
+    subBassAt,
+    hiAirAt,
+    centroidAt,
+    fluxAt,
+    flatnessAt,
+    classification: data.classification,
   };
 }
 

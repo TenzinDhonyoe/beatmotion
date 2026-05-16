@@ -173,24 +173,34 @@ async function main() {
       jsIdent(`media_${i}_${basename(abs, extname(abs))}`, `media_${i}`)
     );
     mediaFilesImport = lines.join("\n") + `\nconst mediaFiles = [${idents.join(", ")}];`;
-    // Media branch: hero image with a subtle Ken Burns through each phrase,
-    // crossfading between images on phrase boundaries. The title sits as a
-    // small overlay below. Kept restrained — title/promo aesthetic, not
-    // music-video-busy.
-    mediaRenderBlock = `// Subtle Ken Burns: scale from 1.00 → 1.05 across the phrase.
-  const kenBurns = 1 + 0.05 * Math.min(1, localFrame / 240);
+    // Media branch: hero image (full-bleed at 88% inset) with continuous
+    // Ken Burns driven by energy curve. Title overlay bottom-left with
+    // kinetic letters + accent line + counter. All atmospheric drivers
+    // from useBeats helpers; no per-beat reactions.
+    mediaRenderBlock = `// Hero image — slow Ken Burns scaled by energy curve.
+  const baseScale = 1.02 + 0.06 * Math.min(1, localFrame / 360);
+  const energyScale = 1 + energy * 0.025;
+  const imageScale = baseScale * energyScale;
   const imageIndex = phraseIndex % mediaFiles.length;
-  const titleWidth = accentLineWidth(frame, phraseStartFrame, fps, 280);
+
+  const titleWidth = accentLineWidth(frame, phraseStartFrame, fps, 320);
+  const titleAccentR = parseInt(accentColor.slice(1, 3), 16);
+  const titleAccentG = parseInt(accentColor.slice(3, 5), 16);
+  const titleAccentB = parseInt(accentColor.slice(5, 7), 16);
+  const titleAccentHex = accentColor.slice(1);
+  const aberration = chromaticAberration(tension, 2);
+  const glow = glowAura(subBass, titleAccentHex, 80);
+
   return (
     <AbsoluteFill style={{ alignItems: "center", justifyContent: "center" }}>
       <div
         style={{
-          width: "82%",
-          height: "82%",
+          width: "88%",
+          height: "88%",
           overflow: "hidden",
-          borderRadius: 4,
+          borderRadius: 6,
           opacity: reveal,
-          transform: \`scale(\${kenBurns.toFixed(4)})\`,
+          transform: \`scale(\${imageScale.toFixed(4)})\`,
         }}
       >
         <Img
@@ -201,37 +211,51 @@ async function main() {
       <div
         style={{
           position: "absolute",
-          left: 80,
-          bottom: 80,
-          color: "white",
+          left: 84,
+          bottom: 84,
+          color: "rgba(255,255,255,0.92)",
           fontFamily: "Inter, system-ui, -apple-system, Helvetica, sans-serif",
         }}
       >
-        <div style={{ display: "flex", gap: 2, fontSize: 64, fontWeight: 800, letterSpacing: -2 }}>
-          {title.split("").map((ch, i) => {
-            const style = kineticLetter(i, reveal, title.length);
-            return (
-              <span key={i} style={{ display: "inline-block", ...style }}>
-                {ch === " " ? "\\u00A0" : ch}
-              </span>
-            );
-          })}
+        <div style={{ ...glow, display: "inline-block" }}>
+          <div
+            style={{
+              display: "flex",
+              gap: "0.02em",
+              fontSize: 84,
+              fontWeight: 800,
+              letterSpacing: "-0.04em",
+              lineHeight: 0.92,
+              ...aberration,
+            }}
+          >
+            {title.split("").map((ch, i) => {
+              const style = kineticLetter(i, reveal, title.length);
+              return (
+                <span key={i} style={{ display: "inline-block", ...style }}>
+                  {ch === " " ? "\\u00A0" : ch}
+                </span>
+              );
+            })}
+          </div>
         </div>
         <div
           style={{
             width: \`\${titleWidth}px\`,
             height: 2,
             background: accentColor,
-            marginTop: 16,
+            marginTop: 18,
+            boxShadow: \`0 0 \${(subBass * 12).toFixed(1)}px rgba(\${titleAccentR},\${titleAccentG},\${titleAccentB},\${(subBass * 0.6).toFixed(2)})\`,
           }}
         />
         <div
           style={{
-            marginTop: 20,
-            fontSize: 13,
-            letterSpacing: 4,
+            marginTop: 22,
+            fontSize: 12,
+            letterSpacing: "0.45em",
             opacity: 0.55 * reveal,
             fontWeight: 500,
+            fontFamily: "'JetBrains Mono', 'SF Mono', monospace",
           }}
         >
           {String(phraseIndex + 1).padStart(2, "0")} / {String(totalPhrases).padStart(2, "0")}
@@ -242,10 +266,24 @@ async function main() {
   } else {
     mediaImportExtra = "";
     mediaFilesImport = "";
-    // Text-only branch: centered title with letter-stagger reveal, animated
-    // accent line underneath, small phrase counter below. The drop camera
-    // shake + flash + scale are applied at the wrapper level (see template).
-    mediaRenderBlock = `const titleWidth = accentLineWidth(frame, phraseStartFrame, fps, 320);
+    // Text-only branch: massive centered typography with chromatic aberration
+    // driven by tension, sub-bass glow on the hero block, kinetic letter
+    // reveal on phrase start, accent line + counter underneath with stagger.
+    // All atmospheric. No per-beat motion in this layer.
+    mediaRenderBlock = `const titleWidth = accentLineWidth(frame, phraseStartFrame, fps, 380);
+  const titleAccentR = parseInt(accentColor.slice(1, 3), 16);
+  const titleAccentG = parseInt(accentColor.slice(3, 5), 16);
+  const titleAccentB = parseInt(accentColor.slice(5, 7), 16);
+  const titleAccentHex = accentColor.slice(1);
+  const aberration = chromaticAberration(tension, 2.5);
+  const glow = glowAura(subBass, titleAccentHex, 90);
+
+  // Stagger: title leads, accent line follows (+6 frames), counter follows (+12).
+  const lineLocal = Math.max(0, localFrame - 6);
+  const counterLocal = Math.max(0, localFrame - 12);
+  const lineReveal = spring({ frame: lineLocal, fps, config: { damping: 18, stiffness: 90 } });
+  const counterReveal = spring({ frame: counterLocal, fps, config: { damping: 22, stiffness: 110 } });
+
   return (
     <AbsoluteFill
       style={{
@@ -253,47 +291,52 @@ async function main() {
         justifyContent: "center",
         flexDirection: "column",
         fontFamily: "Inter, system-ui, -apple-system, Helvetica, sans-serif",
-        color: "white",
+        color: "rgba(255,255,255,0.95)",
       }}
     >
-      <div
-        style={{
-          display: "flex",
-          gap: "0.02em",
-          fontSize: 140,
-          fontWeight: 800,
-          letterSpacing: -6,
-          lineHeight: 1,
-          textTransform: "uppercase",
-        }}
-      >
-        {title.split("").map((ch, i) => {
-          const style = kineticLetter(i, reveal, title.length);
-          return (
-            <span key={i} style={{ display: "inline-block", ...style }}>
-              {ch === " " ? "\\u00A0" : ch}
-            </span>
-          );
-        })}
+      <div style={{ ...glow, padding: "20px 40px" }}>
+        <div
+          style={{
+            display: "flex",
+            gap: "0.02em",
+            fontSize: 184,
+            fontWeight: 900,
+            letterSpacing: "-0.05em",
+            lineHeight: 0.92,
+            textTransform: "uppercase",
+            ...aberration,
+          }}
+        >
+          {title.split("").map((ch, i) => {
+            const style = kineticLetter(i, reveal, title.length, { travelPx: 50 });
+            return (
+              <span key={i} style={{ display: "inline-block", ...style }}>
+                {ch === " " ? "\\u00A0" : ch}
+              </span>
+            );
+          })}
+        </div>
       </div>
       <div
         style={{
-          width: \`\${titleWidth}px\`,
+          width: \`\${titleWidth * lineReveal}px\`,
           height: 2,
           background: accentColor,
-          marginTop: 28,
+          marginTop: 36,
+          boxShadow: \`0 0 \${(subBass * 16).toFixed(1)}px rgba(\${titleAccentR},\${titleAccentG},\${titleAccentB},\${(subBass * 0.7).toFixed(2)})\`,
         }}
       />
       <div
         style={{
-          marginTop: 36,
-          fontSize: 14,
-          letterSpacing: 6,
-          opacity: 0.45 * reveal,
+          marginTop: 40,
+          fontSize: 13,
+          letterSpacing: "0.5em",
+          opacity: 0.5 * counterReveal,
           fontWeight: 500,
+          fontFamily: "'JetBrains Mono', 'SF Mono', monospace",
         }}
       >
-        {String(phraseIndex + 1).padStart(2, "0")} / {String(totalPhrases).padStart(2, "0")}
+        {String(phraseIndex + 1).padStart(2, "0")} &nbsp;/&nbsp; {String(totalPhrases).padStart(2, "0")}
       </div>
     </AbsoluteFill>
   );`;

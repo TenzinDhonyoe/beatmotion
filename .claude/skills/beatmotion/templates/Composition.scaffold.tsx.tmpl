@@ -10,21 +10,42 @@ import beatsData from "__BEATS_IMPORT__";
 import { createBeatHelpers } from "./useBeats";
 import {
   accentLineWidth,
+  cameraDolly,
+  chromaticAberration,
   downbeatPulse,
   dropImpact,
+  glowAura,
+  grainNoise,
+  hueShiftFromCentroid,
   kineticLetter,
+  parallaxDrift,
+  vignetteEdge,
 } from "./transitions";
 __MEDIA_FILES_IMPORT__
 
 const helpers = createBeatHelpers(beatsData);
 
-// Restrained palette that cycles per phrase. Title/promo aesthetic: white
-// text on near-black with a single accent color drawing the eye.
-const ACCENT_COLORS = ["#6EE7FF", "#C6A0FF", "#FFB45C", "#FF6E8A"];
+// Palette mapped from the classifier's genre tag. Each entry is a small
+// palette of accent colors — the phrase picker cycles through them so
+// adjacent phrases get different accents but the overall feel stays
+// coherent per song. The bg color is always near-black; we vary the
+// warmth (#000 cold, #0A0807 warm-dark) per genre.
+const PALETTE_BY_GENRE: Record<string, { accents: string[]; bg: string }> = {
+  edm:           { accents: ["#00DC82", "#FF5C5C", "#6E7BFF"], bg: "#000000" },
+  house:         { accents: ["#00DC82", "#FFB45C", "#6E7BFF"], bg: "#000000" },
+  trap:          { accents: ["#FF5C5C", "#FFB45C", "#6E7BFF"], bg: "#000000" },
+  hiphop:        { accents: ["#FFB45C", "#F0F0F0", "#C6A0FF"], bg: "#000000" },
+  drum_and_bass: { accents: ["#00DC82", "#FF5C5C", "#FFB45C"], bg: "#000000" },
+  pop:           { accents: ["#FF6E8A", "#C6A0FF", "#6EE7FF"], bg: "#000000" },
+  rock:          { accents: ["#FF5C5C", "#FFB45C", "#F0F0F0"], bg: "#000000" },
+  ballad:        { accents: ["#FFE0B2", "#FFB4A2", "#E5E5E5"], bg: "#0A0808" },
+  lofi:          { accents: ["#FFE0B2", "#C6A0FF", "#FFB4A2"], bg: "#0A0807" },
+  general:       { accents: ["#6EE7FF", "#C6A0FF", "#FFB45C", "#FF6E8A"], bg: "#000000" },
+};
+const PALETTE = PALETTE_BY_GENRE[helpers.classification?.genre ?? "general"]
+  ?? PALETTE_BY_GENRE.general;
 
-// Pre-compute Sequence boundaries from phrases (if grid-locked) or sections.
-// One Sequence per phrase keeps the visual content stable for ~16 beats at
-// a time, so the eye isn't being asked to re-anchor every beat.
+// Sequence boundaries: phrase-based when grid-locked, section-based otherwise.
 const SEQUENCE_BOUNDARIES = (() => {
   if (helpers.gridLocked && helpers.phrases.length > 0) {
     return helpers.phrases.map((p, i) => ({
@@ -54,12 +75,21 @@ const SEQUENCE_BOUNDARIES = (() => {
 
 export const __COMP_NAME__: React.FC = () => {
   return (
-    <AbsoluteFill style={{ overflow: "hidden", background: "#050507" }}>
+    <AbsoluteFill style={{ background: PALETTE.bg, overflow: "hidden" }}>
       <Audio src="__AUDIO_SRC__" />
 
-      {/* Outer wrapper holds drop-impact camera shake + scale. */}
-      <DropCameraWrap>
-        <BackgroundLayer />
+      {/* Layer 1: AmbientBg — radial gradient that breathes with energy,
+          slowly drifts with intensity, hue-shifts with centroid. */}
+      <AmbientBackground />
+
+      {/* Layer 2: Camera group — wraps everything content-related so dropImpact
+          + cameraDolly transforms shake/scale the whole composition together. */}
+      <CameraGroup>
+        {/* Layer 3: AnticipationVignette — edge-darkening during pre-drop
+            tension. Composes with vignetteEdge for an always-on subtle vignette. */}
+        <AnticipationVignette />
+
+        {/* Layer 4: Per-phrase typography. */}
         {SEQUENCE_BOUNDARIES.map((b) => {
           const durationInFrames = Math.max(1, b.endFrame - b.startFrame);
           return (
@@ -76,26 +106,38 @@ export const __COMP_NAME__: React.FC = () => {
             </Sequence>
           );
         })}
-      </DropCameraWrap>
+      </CameraGroup>
 
-      {/* Flash + vignette overlays live OUTSIDE the camera-wrapped tree so
-          they don't inherit its scale/shake — they're fullscreen washes. */}
+      {/* Layer 5: Drop flash overlay — full-frame white wash, sits OUTSIDE
+          the camera group so it doesn't shake with the impact transform. */}
       <DropFlashOverlay />
+
+      {/* Layer 6: Grain overlay — 3% noise, premium feel, hides banding. */}
+      <GrainOverlay />
     </AbsoluteFill>
   );
 };
 
-const DropCameraWrap: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+// ─────────────────────────────────────────────────────────────────────────
+// LAYERS
+// ─────────────────────────────────────────────────────────────────────────
+
+const CameraGroup: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const frame = useCurrentFrame();
-  // Apply the nearest drop's camera shake + scale to everything inside.
-  // Only one drop is "active" at a time (within its ±30-frame window).
+  // Drop impact (discrete, multi-stage) composes with cameraDolly (continuous,
+  // intensity-driven). When both active, both transforms apply — drop wins
+  // visually because its amplitudes are much larger.
   const drop = helpers.drops.find(
     (d) => frame >= d.frame - 12 && frame <= d.frame + 30
   );
-  const impact = drop ? dropImpact(frame, drop.frame, { intensity: drop.kind === "main_drop" ? 1 : 0.7 }) : null;
+  const impact = drop
+    ? dropImpact(frame, drop.frame, { intensity: drop.kind === "main_drop" ? 1 : 0.7 })
+    : null;
+  const dolly = cameraDolly(helpers.intensityAt(frame), 0.02);
+  // If a drop is active, dropImpact's transform dominates; otherwise dolly's.
+  const transform = impact ? impact.cameraStyle : dolly;
   return (
-    <AbsoluteFill style={impact?.cameraStyle ?? {}}>
-      {/* anticipation vignette dims everything just before the hit. */}
+    <AbsoluteFill style={transform}>
       {impact ? <AbsoluteFill style={{ pointerEvents: "none", ...impact.vignetteStyle }} /> : null}
       {children}
     </AbsoluteFill>
@@ -108,15 +150,25 @@ const DropFlashOverlay: React.FC = () => {
     (d) => frame >= d.frame - 12 && frame <= d.frame + 30
   );
   if (!drop) return null;
-  const impact = dropImpact(frame, drop.frame, { intensity: drop.kind === "main_drop" ? 1 : 0.7 });
+  const impact = dropImpact(frame, drop.frame, {
+    intensity: drop.kind === "main_drop" ? 1 : 0.7,
+  });
   return <AbsoluteFill style={{ pointerEvents: "none", ...impact.flashStyle }} />;
 };
 
-const BackgroundLayer: React.FC = () => {
+const AmbientBackground: React.FC = () => {
   const frame = useCurrentFrame();
-  // Radial gradient that brightens 4% on each downbeat then decays.
-  // Subtle enough that the user perceives "breathing" without anything
-  // moving visibly — fills the no-motion gaps between phrase boundaries.
+  const { fps } = useVideoConfig();
+  const energy = helpers.energyAt(frame);
+  const intensity = helpers.intensityAt(frame);
+  const centroid = helpers.centroidAt(frame);
+  const subBass = helpers.subBassAt(frame);
+
+  // Slow continuous parallax drift on the gradient itself. Modulated by
+  // intensity so quiet passages drift gently and loud passages move more.
+  const drift = parallaxDrift(frame, fps, intensity, { speed: 0.25, maxPx: 20, axis: "xy" });
+
+  // Downbeat pulse adds a brief brightening on each bar-1.
   const lastDownbeat = (() => {
     for (let i = helpers.beats.length - 1; i >= 0; i--) {
       if (helpers.beats[i].downbeat && helpers.beats[i].frame <= frame) {
@@ -125,9 +177,47 @@ const BackgroundLayer: React.FC = () => {
     }
     return null;
   })();
-  const pulse = downbeatPulse(frame, lastDownbeat);
-  const bg = `radial-gradient(circle at 50% 45%, rgba(255,255,255,${(0.05 + pulse).toFixed(3)}) 0%, transparent 65%), #050507`;
-  return <AbsoluteFill style={{ background: bg }} />;
+  const pulse = downbeatPulse(frame, lastDownbeat, { peak: 0.05 });
+  // Energy adds a baseline brightening; sub-bass adds a low warm glow.
+  const innerBrightness = 0.06 + energy * 0.06 + pulse;
+  const warmth = subBass * 0.05; // adds slight orange when sub hits
+
+  const hue = hueShiftFromCentroid(centroid, { degMax: 6 });
+
+  const bg = `radial-gradient(circle at 50% 45%, rgba(255,${Math.round(255 - warmth * 80)},${Math.round(255 - warmth * 160)},${innerBrightness.toFixed(3)}) 0%, transparent 60%)`;
+  return (
+    <AbsoluteFill style={{ ...drift, ...hue }}>
+      <AbsoluteFill style={{ background: bg }} />
+    </AbsoluteFill>
+  );
+};
+
+const AnticipationVignette: React.FC = () => {
+  const frame = useCurrentFrame();
+  // Always-on subtle edge vignette + tension-driven darkening.
+  const tension = helpers.tensionAt(frame);
+  const base = vignetteEdge(0.35, { maxOpacity: 0.5 }); // baseline
+  const tensionAdd = vignetteEdge(tension, { maxOpacity: 0.35 });
+  return (
+    <>
+      <AbsoluteFill style={{ pointerEvents: "none", ...base }} />
+      <AbsoluteFill style={{ pointerEvents: "none", ...tensionAdd }} />
+    </>
+  );
+};
+
+const GrainOverlay: React.FC = () => {
+  // Single static SVG noise pattern. Cheap; doesn't recompute per frame.
+  return (
+    <AbsoluteFill
+      style={{
+        pointerEvents: "none",
+        opacity: 0.04,
+        mixBlendMode: "overlay",
+        ...grainNoise(0.4, 11),
+      }}
+    />
+  );
 };
 
 const PhraseView: React.FC<{
@@ -138,17 +228,21 @@ const PhraseView: React.FC<{
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const section = helpers.sections[sectionIndex];
-  const accentColor = ACCENT_COLORS[phraseIndex % ACCENT_COLORS.length];
 
-  // Reveal progress for the phrase: spring from 0 to 1 over the first
-  // ~30 frames of the phrase. All title content uses this as its master
-  // timing variable.
+  const accentColor = PALETTE.accents[phraseIndex % PALETTE.accents.length];
+
+  // Spring reveal progress for the phrase. Slow stiffness → gentle settle.
   const localFrame = frame - phraseStartFrame;
   const reveal = spring({
     frame: Math.max(0, localFrame),
     fps,
-    config: { damping: 18, stiffness: 80, mass: 0.9 },
+    config: { damping: 22, stiffness: 75, mass: 1 },
   });
+
+  // Continuous drivers for the typography stack.
+  const tension = helpers.tensionAt(frame);
+  const subBass = helpers.subBassAt(frame);
+  const energy = helpers.energyAt(frame);
 
   const title = section ? section.kind.toUpperCase() : "BEATMOTION";
   const totalPhrases = SEQUENCE_BOUNDARIES.length;

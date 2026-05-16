@@ -493,3 +493,154 @@ export function downbeatPulse(
   if (d > decayFrames) return 0;
   return peak * (1 - d / decayFrames);
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// Phase 5 atmospheric / continuous-driver helpers.
+//
+// These primitives don't fire on discrete events. They take continuous
+// audio drivers (intensity, tension, subBass, hiAir, centroid) from
+// `useBeats.*At(frame)` and return CSS style fragments that subtly modulate
+// the frame at all times. The goal: most frames have continuous motion
+// driven by the audio's continuous properties, with discrete events
+// (drops, phrase starts) as punctuation on top.
+// ─────────────────────────────────────────────────────────────────────────
+
+/**
+ * Slow continuous parallax drift. Translates an element by a smooth
+ * sinusoidal offset whose amplitude is modulated by `intensity` (0..1).
+ * Bigger intensity → bigger drift. Used on background layers to give them
+ * an atmospheric "breathing" quality even during silent passages.
+ *
+ *   speed   — radians per second of the drift sinusoid (0.3 = slow, 1.2 = busy)
+ *   maxPx   — peak amplitude in pixels at intensity = 1.0
+ *   axis    — "x" / "y" / "xy" (xy = elliptical orbit)
+ */
+export function parallaxDrift(
+  frame: number,
+  fps: number,
+  intensity: number,
+  opts: { speed?: number; maxPx?: number; axis?: "x" | "y" | "xy"; phase?: number } = {}
+): Style {
+  const speed = opts.speed ?? 0.4;
+  const maxPx = opts.maxPx ?? 14;
+  const axis = opts.axis ?? "xy";
+  const phase = opts.phase ?? 0;
+  const t = (frame / fps) * speed + phase;
+  const amp = maxPx * Math.max(0, Math.min(1, intensity));
+  const dx = axis === "y" ? 0 : Math.sin(t) * amp;
+  const dy = axis === "x" ? 0 : Math.cos(t * 0.7) * amp;
+  return { transform: `translate(${dx.toFixed(2)}px, ${dy.toFixed(2)}px)` };
+}
+
+/**
+ * Barely-visible chromatic aberration — text-shadow with red and blue offsets.
+ * Driven by `tension` (0..1). At tension 0, returns no shadow (clean). At
+ * tension 1, applies ~3px offset of red + blue channels. Reads as cinematic
+ * when subtle.
+ *
+ * Apply to hero typography. Keep maxOffset ≤ 3px or it looks broken.
+ */
+export function chromaticAberration(tension: number, maxOffset: number = 3): Style {
+  const t = Math.max(0, Math.min(1, tension));
+  if (t < 0.05) return {};
+  const off = t * maxOffset;
+  return {
+    textShadow: `${(-off).toFixed(2)}px 0 rgba(255,80,80,0.7), ${off.toFixed(2)}px 0 rgba(80,140,255,0.7)`,
+  };
+}
+
+/**
+ * Sub-bass-driven warm glow. Applies a `box-shadow` aura whose radius and
+ * opacity scale with `subBass` (0..1). Use on the hero title block so the
+ * bass HITS visually punch the typography.
+ *
+ *   color   — RGB triplet hex string (no leading #)
+ *   maxRadius — peak shadow radius in px at subBass=1.0
+ */
+export function glowAura(
+  subBass: number,
+  color: string = "FFFFFF",
+  maxRadius: number = 80
+): Style {
+  const t = Math.max(0, Math.min(1, subBass));
+  if (t < 0.05) return {};
+  const radius = t * maxRadius;
+  const spread = t * 4;
+  const opacity = t * 0.4;
+  // Convert "FFFFFF" → "255,255,255".
+  const r = parseInt(color.slice(0, 2), 16);
+  const g = parseInt(color.slice(2, 4), 16);
+  const b = parseInt(color.slice(4, 6), 16);
+  return {
+    boxShadow: `0 0 ${radius.toFixed(1)}px ${spread.toFixed(1)}px rgba(${r},${g},${b},${opacity.toFixed(3)})`,
+  };
+}
+
+/**
+ * Edge vignette that intensifies on tension. Static gradient that just
+ * gets denser when tension is high. Use on a full-frame AbsoluteFill
+ * overlay to darken the edges, focusing attention on the center.
+ */
+export function vignetteEdge(tension: number, opts: { maxOpacity?: number } = {}): Style {
+  const max = opts.maxOpacity ?? 0.5;
+  const t = Math.max(0, Math.min(1, tension));
+  const opacity = t * max;
+  if (opacity < 0.02) return {};
+  return {
+    background: `radial-gradient(circle at 50% 50%, transparent 50%, rgba(0,0,0,${opacity.toFixed(3)}) 100%)`,
+  };
+}
+
+/**
+ * Static grain noise overlay. Returns a `background-image` data URL
+ * containing an inline SVG with a `feTurbulence` filter, which the browser
+ * rasterizes into actual noise. Avoids per-frame computation entirely;
+ * one static asset that hides flat-color banding and gives the frame a
+ * premium "film grain" texture.
+ *
+ *   opacity — 0..1, default 0.03 (3%, barely visible)
+ *   seed    — turbulence seed; change to get a different grain pattern
+ */
+export function grainNoise(opacity: number = 0.03, seed: number = 7): Style {
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.95' numOctaves='2' stitchTiles='stitch' seed='${seed}'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 ${opacity} 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>`;
+  // URL-encode # so it stays a valid data URL.
+  const encoded = encodeURIComponent(svg).replace(/'/g, "%27");
+  return {
+    backgroundImage: `url("data:image/svg+xml;utf8,${encoded}")`,
+    backgroundRepeat: "repeat",
+    opacity: 1,
+  };
+}
+
+/**
+ * Hue rotation derived from spectral centroid. As the music's spectral
+ * center of mass shifts (warm/dark to bright), the hue rotates ±degMax
+ * degrees from a neutral 0. Use on background gradients to give the frame
+ * a colorshift that tracks the music's timbre.
+ */
+export function hueShiftFromCentroid(
+  centroid: number,
+  opts: { degMax?: number } = {}
+): Style {
+  const max = opts.degMax ?? 8;
+  const t = Math.max(0, Math.min(1, centroid));
+  // Center the rotation around 0 — centroid 0.5 → 0deg rotation.
+  const deg = (t - 0.5) * max * 2;
+  if (Math.abs(deg) < 0.5) return {};
+  return { filter: `hue-rotate(${deg.toFixed(2)}deg)` };
+}
+
+/**
+ * Camera dolly: subtle continuous scale modulation driven by intensity.
+ * Returns a transform with scale `1 + intensity * amp`. Use on the camera
+ * group so the WHOLE composition gently zooms in on loud sections and
+ * pulls back during quiet sections.
+ *
+ * Different from dropImpact's discrete punch — this is the continuous
+ * "we're in a loud part of the song" signal.
+ */
+export function cameraDolly(intensity: number, amp: number = 0.025): Style {
+  const t = Math.max(0, Math.min(1, intensity));
+  const scale = 1 + t * amp;
+  return { transform: `scale(${scale.toFixed(4)})` };
+}
